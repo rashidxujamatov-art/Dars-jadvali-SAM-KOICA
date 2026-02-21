@@ -1,0 +1,483 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, 
+  UserPlus, 
+  BookOpen, 
+  Calendar, 
+  Download, 
+  Trash2, 
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Briefcase,
+  Settings,
+  Bell,
+  Hash,
+  Cloud
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  query, 
+  deleteDoc,
+  updateDoc 
+} from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+
+// Firebase konfiguratsiyasi
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'schedule-app-id';
+
+// Excel kutubxonasi yuklash
+const loadXLSX = () => {
+  return new Promise((resolve) => {
+    if (window.XLSX) {
+      resolve(window.XLSX);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    script.onload = () => resolve(window.XLSX);
+    document.head.appendChild(script);
+  });
+};
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [currentTab, setCurrentTab] = useState("");
+  const [finalSchedule, setFinalSchedule] = useState({});
+  const [activeSem, setActiveSem] = useState("1");
+  const [daysCount, setDaysCount] = useState(6);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form holatlari
+  const [groupInput, setGroupInput] = useState("");
+  const [teacherInput, setTeacherInput] = useState({ name: "", degree: "O'qituvchi" });
+  const [assignInput, setAssignInput] = useState({
+    group: "",
+    teacherId: "",
+    subject: "",
+    type: "nazariy",
+    semester: "1",
+    totalHours: 2 
+  });
+
+  // 1. Firebase Auth - Avtorizatsiya
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Firestore Listeners - Ma'lumotlarni bazadan o'qish (Haqiqiy vaqtda)
+  useEffect(() => {
+    if (!user) return;
+
+    const groupsRef = collection(db, 'artifacts', appId, 'public', 'data', 'groups');
+    const teachersRef = collection(db, 'artifacts', appId, 'public', 'data', 'teachers');
+    const assignmentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'assignments');
+    const scheduleRef = collection(db, 'artifacts', appId, 'public', 'data', 'meta');
+
+    const unsubGroups = onSnapshot(groupsRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setGroups(data);
+      if (data.length > 0 && !currentTab) setCurrentTab(data[0].name);
+    }, (err) => console.error("Groups fetch error:", err));
+
+    const unsubTeachers = onSnapshot(teachersRef, (snapshot) => {
+      setTeachers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (err) => console.error("Teachers fetch error:", err));
+
+    const unsubAssignments = onSnapshot(assignmentsRef, (snapshot) => {
+      setAssignments(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (err) => console.error("Assignments fetch error:", err));
+
+    return () => {
+      unsubGroups();
+      unsubTeachers();
+      unsubAssignments();
+    };
+  }, [user]);
+
+  const notify = (msg, type = "success") => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 3000);
+  };
+
+  // Ma'lumot qo'shish (Firestore ga saqlash)
+  const addGroup = async () => {
+    if (!user) return;
+    if (groupInput.trim()) {
+      const id = Date.now().toString();
+      const newGroup = { name: groupInput.trim() };
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'groups', id), newGroup);
+      setGroupInput("");
+      notify(`${newGroup.name} guruhi bazaga saqlandi!`);
+    }
+  };
+
+  const addTeacher = async () => {
+    if (!user) return;
+    if (teacherInput.name.trim()) {
+      const id = Date.now().toString();
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'teachers', id), {
+        name: teacherInput.name.trim(),
+        degree: teacherInput.degree
+      });
+      setTeacherInput({ name: "", degree: "O'qituvchi" });
+      notify("O'qituvchi ma'lumotlari bazaga saqlandi!");
+    }
+  };
+
+  const addAssignment = async () => {
+    if (!user) return;
+    if (assignInput.group && assignInput.teacherId && assignInput.subject && assignInput.totalHours > 0) {
+      const id = Date.now().toString();
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assignments', id), {
+        ...assignInput,
+        totalHours: Number(assignInput.totalHours)
+      });
+      setAssignInput({ ...assignInput, subject: "", totalHours: 2 });
+      notify("Yuklama muvaffaqiyatli saqlandi!");
+    } else {
+      notify("Barcha maydonlarni to'ldiring", "error");
+    }
+  };
+
+  const deleteItem = async (collectionName, id) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
+      notify("O'chirildi", "info");
+    } catch (e) {
+      notify("O'chirishda xatolik", "error");
+    }
+  };
+
+  const generateSchedule = () => {
+    if (groups.length === 0) {
+        notify("Avval guruhlarni qo'shing", "error");
+        return;
+    }
+
+    const newSchedule = {};
+    const maxSlotsPerDay = 4; 
+
+    groups.forEach(group => {
+      const schedule = Array.from({ length: daysCount }, () => Array(maxSlotsPerDay).fill(null));
+      const groupAssig = assignments.filter(a => a.group === group.name && a.semester === activeSem);
+
+      groupAssig.forEach(as => {
+        const teacher = teachers.find(t => t.id === as.teacherId);
+        const lesson = { 
+          subject: as.subject, 
+          teacher: teacher ? teacher.name : "Noma'lum",
+          type: as.type.toUpperCase()
+        };
+
+        let hoursLeft = as.totalHours;
+        
+        if (as.type === 'amaliy' && hoursLeft >= 6) {
+          for (let d = 0; d < daysCount; d++) {
+            if (!schedule[d][0] && !schedule[d][1] && !schedule[d][2]) {
+              schedule[d][0] = lesson;
+              schedule[d][1] = lesson;
+              schedule[d][2] = lesson;
+              hoursLeft -= 6;
+              break;
+            }
+          }
+        }
+
+        while (hoursLeft >= 2) {
+          let placed = false;
+          for (let d = 0; d < daysCount; d++) {
+            for (let s = 0; s < maxSlotsPerDay; s++) {
+              if (!schedule[d][s]) {
+                const alreadyHasThisSubject = schedule[d].some(slot => slot && slot.subject === as.subject);
+                if (as.type === 'nazariy' && alreadyHasThisSubject) continue;
+
+                schedule[d][s] = lesson;
+                hoursLeft -= 2;
+                placed = true;
+                break;
+              }
+            }
+            if (placed) break;
+          }
+          if (!placed) break; 
+        }
+      });
+      newSchedule[group.name] = schedule;
+    });
+
+    setFinalSchedule(newSchedule);
+    notify("Bazadagi yuklama asosida jadval hisoblandi!");
+  };
+
+  const exportExcel = async () => {
+    if (Object.keys(finalSchedule).length === 0) {
+      notify("Avval jadvalni hisoblang", "error");
+      return;
+    }
+
+    const XLSX = await loadXLSX();
+    const wb = XLSX.utils.book_new();
+    const days = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
+
+    Object.keys(finalSchedule).forEach(groupName => {
+      const data = [
+        [`${groupName} Guruhi - ${activeSem}-Semestr Jadvali`],
+        ["KUN", "1-JUFTLIK", "2-JUFTLIK", "3-JUFTLIK", "4-JUFTLIK"]
+      ];
+
+      finalSchedule[groupName].forEach((daySlots, i) => {
+        data.push([
+          days[i] || `Kun ${i+1}`, 
+          ...daySlots.map(s => s ? `${s.subject} (${s.teacher})` : "-")
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, groupName);
+    });
+
+    XLSX.writeFile(wb, `Jadval_${activeSem}_semestr.xlsx`);
+    notify("Excel fayli yuklab olindi");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Bazaga ulanmoqda...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 font-sans p-4">
+      {/* Notifications */}
+      <div className="fixed top-6 right-6 z-50 space-y-3">
+        {notifications.map(n => (
+          <div key={n.id} className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border-l-4 animate-in fade-in slide-in-from-right-10 duration-300 ${
+            n.type === 'success' ? 'bg-white border-emerald-500 text-emerald-700' : 
+            n.type === 'error' ? 'bg-white border-red-500 text-red-700' : 'bg-white border-blue-500 text-blue-700'
+          }`}>
+            {n.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+            <span className="text-sm font-bold">{n.msg}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="max-w-7xl mx-auto">
+        <header className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 mb-8 flex flex-col lg:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-5">
+            <div className="bg-indigo-600 p-4 rounded-[1.5rem] text-white shadow-xl shadow-indigo-200">
+              <Calendar size={36} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-800">SMART<span className="text-indigo-600">SCHEDULE</span></h1>
+              <p className="text-slate-400 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                <Cloud size={12} className="text-emerald-500" /> Bulutli Tizim Onlayn
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl border">
+              <button onClick={() => setDaysCount(5)} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all ${daysCount === 5 ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>5 KUNLIK</button>
+              <button onClick={() => setDaysCount(6)} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all ${daysCount === 6 ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>6 KUNLIK</button>
+            </div>
+            <select className="bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-black text-slate-700 outline-none shadow-sm" value={activeSem} onChange={e => setActiveSem(e.target.value)}>
+              <option value="1">1-SEMESTR</option>
+              <option value="2">2-SEMESTR</option>
+            </select>
+            <button onClick={generateSchedule} className="bg-slate-900 hover:bg-black text-white px-8 py-3.5 rounded-2xl font-black text-sm transition-all shadow-xl shadow-slate-200 flex items-center gap-3 active:scale-95">
+              <Settings size={20} /> HISOBLASH
+            </button>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-4 space-y-6">
+            {/* Guruhlar bo'limi */}
+            <div className="bg-white rounded-[2rem] p-7 shadow-sm border border-slate-100">
+              <h3 className="text-xs font-black text-slate-400 uppercase mb-5 flex items-center gap-2 tracking-widest">
+                <Users size={18} className="text-indigo-500" /> Guruhlar ({groups.length})
+              </h3>
+              <div className="flex gap-3 mb-4">
+                <input 
+                  type="text" 
+                  placeholder="Guruh nomi..." 
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none"
+                  value={groupInput}
+                  onChange={e => setGroupInput(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && addGroup()}
+                />
+                <button onClick={addGroup} className="bg-indigo-600 text-white w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-indigo-700 font-black text-xl">+</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {groups.map(g => (
+                  <div key={g.id} className="group flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-600">{g.name}</span>
+                    <button onClick={() => deleteItem('groups', g.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Yuklama bo'limi */}
+            <div className="bg-white rounded-[2rem] p-7 shadow-sm border border-slate-100">
+              <h3 className="text-xs font-black text-slate-400 uppercase mb-5 flex items-center gap-2 tracking-widest">
+                <BookOpen size={18} className="text-indigo-500" /> Yuklamani Saqlash
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <select className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-bold outline-none" value={assignInput.group} onChange={e => setAssignInput({...assignInput, group: e.target.value})}>
+                    <option value="">Guruh...</option>
+                    {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                  </select>
+                  <select className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-bold outline-none" value={assignInput.teacherId} onChange={e => setAssignInput({...assignInput, teacherId: e.target.value})}>
+                    <option value="">O'qituvchi...</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <input type="text" placeholder="Fan nomi..." className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-bold outline-none" value={assignInput.subject} onChange={e => setAssignInput({...assignInput, subject: e.target.value})}/>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" placeholder="Soat" className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-bold outline-none" value={assignInput.totalHours} onChange={e => setAssignInput({...assignInput, totalHours: e.target.value})}/>
+                  <select className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-bold outline-none" value={assignInput.type} onChange={e => setAssignInput({...assignInput, type: e.target.value})}>
+                    <option value="nazariy">Nazariy</option>
+                    <option value="amaliy">Amaliy</option>
+                  </select>
+                </div>
+                <button onClick={addAssignment} className="w-full bg-emerald-600 text-white py-4 rounded-2xl text-xs font-black uppercase hover:bg-emerald-700 shadow-xl shadow-emerald-100 active:scale-95">Bazaga Saqlash</button>
+              </div>
+            </div>
+
+            {/* O'qituvchilar bo'limi */}
+            <div className="bg-white rounded-[2rem] p-7 shadow-sm border border-slate-100">
+              <h3 className="text-xs font-black text-slate-400 uppercase mb-5 flex items-center gap-2 tracking-widest">
+                <UserPlus size={18} className="text-indigo-500" /> O'qituvchilar ({teachers.length})
+              </h3>
+              <div className="flex gap-2 mb-4">
+                <input 
+                  type="text" 
+                  placeholder="F.I.SH..." 
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none"
+                  value={teacherInput.name}
+                  onChange={e => setTeacherInput({...teacherInput, name: e.target.value})}
+                />
+                <button onClick={addTeacher} className="bg-slate-800 text-white px-5 rounded-2xl font-black">OK</button>
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+                {teachers.map(t => (
+                  <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-600">{t.name}</span>
+                    <button onClick={() => deleteItem('teachers', t.id)} className="text-slate-300 hover:text-red-500">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-8">
+            <div className="bg-white rounded-[3rem] p-8 shadow-sm border border-slate-100 min-h-[800px]">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 border-b border-slate-50 pb-8">
+                <div className="flex gap-3 overflow-x-auto w-full md:w-auto pb-2 scrollbar-hide">
+                  {groups.map(g => (
+                    <button key={g.id} onClick={() => setCurrentTab(g.name)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${currentTab === g.name ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={exportExcel} className="flex items-center gap-3 bg-emerald-50 text-emerald-700 px-7 py-3.5 rounded-2xl text-xs font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition shadow-sm">
+                  <Download size={18} /> Excelga Yuklash
+                </button>
+              </div>
+
+              {currentTab && finalSchedule[currentTab] ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {finalSchedule[currentTab].map((daySlots, dayIdx) => (
+                    <div key={dayIdx} className="bg-slate-50/50 rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+                      <div className="bg-white px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-[0.2em]">{["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"][dayIdx]}</span>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        {daySlots.map((slot, slotIdx) => (
+                          <div key={slotIdx}>
+                            {slot ? (
+                              <div className="p-5 rounded-3xl border shadow-sm bg-white border-slate-100 animate-in zoom-in-95 duration-200">
+                                <div className="flex justify-between items-center mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="w-7 h-7 flex items-center justify-center bg-slate-900 text-white text-[10px] font-black rounded-xl">{slotIdx + 1}</span>
+                                    <span className={`text-[9px] font-black px-2 py-1 rounded-lg border uppercase ${slot.type === 'AMALIY' ? 'text-emerald-500 border-emerald-100 bg-emerald-50' : 'text-indigo-500 border-indigo-100 bg-indigo-50'}`}>{slot.type}</span>
+                                  </div>
+                                  <Clock size={14} className="text-slate-300" />
+                                </div>
+                                <h4 className="text-sm font-black text-slate-800 mb-3 leading-tight">{slot.subject}</h4>
+                                <div className="flex items-center gap-3 pt-3 border-t border-slate-50">
+                                  <span className="text-[11px] font-bold text-slate-500">{slot.teacher}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="border-2 border-dashed border-slate-200 py-10 rounded-[2rem] flex items-center justify-center opacity-40">
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">Bo'sh</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-48 text-slate-200">
+                  <Cloud size={48} strokeWidth={1} className="animate-pulse" />
+                  <p className="text-sm font-black uppercase tracking-[0.5em] text-slate-300 mt-4">Ma'lumotlar yuklandi. Jadvalni hisoblang</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
