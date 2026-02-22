@@ -1,319 +1,437 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Plus, Trash2, Calendar, Users, BookOpen, UserCheck, 
-  Settings, Download, AlertTriangle, CheckCircle2, 
-  ChevronRight, ChevronLeft, Info, Lock
-} from 'lucide-react';
-
-// --- Boshlang'ich Ma'lumotlar ---
-const INITIAL_DATA = {
-  groups: [
-    { id: 'g1', name: '711-20', semester: 4 },
-    { id: 'g2', name: '712-20', semester: 4 }
-  ],
-  teachers: [
-    { id: 't1', firstName: 'Aziz', lastName: 'Rahimov', maxDaily: 8, maxWeekly: 40 },
-    { id: 't2', firstName: 'Malika', lastName: 'Sultonova', maxDaily: 6, maxWeekly: 30 }
-  ],
-  subjects: [
-    { id: 's1', name: 'Algoritmlar', type: 'Nazariy', hours: 32, priority: 8, color: '#3b82f6' },
-    { id: 's2', name: 'Maʼlumotlar Ombori', type: 'Amaliy', hours: 48, priority: 10, color: '#10b981' }
-  ],
-  holidays: ['2024-03-21', '2024-09-01']
-};
-
-const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-const SLOTS = [
-  { id: 1, time: '08:30 - 09:50' },
-  { id: 2, time: '10:00 - 11:20' },
-  { id: 3, time: '11:30 - 12:50' },
-  { id: 4, time: '13:30 - 14:50' },
-];
-
-const App = () => {
-  const [view, setView] = useState('user'); // 'user' yoki 'admin'
-  const [activeTab, setActiveTab] = useState('schedule');
-  const [groups, setGroups] = useState(INITIAL_DATA.groups);
-  const [teachers, setTeachers] = useState(INITIAL_DATA.teachers);
-  const [subjects, setSubjects] = useState(INITIAL_DATA.subjects);
-  const [schedule, setSchedule] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(INITIAL_DATA.groups[0].id);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // --- Algoritm: Jadval yaratish ---
-  const generateSchedule = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      const newSchedule = [];
-      const teacherWorkload = {}; // { teacherId: { day: hours } }
-
-      groups.forEach(group => {
-        let currentDay = 0;
-        let currentSlot = 1;
-
-        // Amaliy fanlarni birinchi joylashtirish (Prioritet bo'yicha)
-        const sortedSubjects = [...subjects].sort((a, b) => b.priority - a.priority);
-
-        sortedSubjects.forEach(subject => {
-          const teacher = teachers[Math.floor(Math.random() * teachers.length)];
-          const lessonCount = subject.type === 'Amaliy' ? 3 : 1; // Amaliy 3 juftlik, Nazariy 1
-
-          // Bo'sh joy qidirish va konfliktlarni tekshirish logic (Soddalashtirilgan Greedy)
-          if (currentSlot + lessonCount <= SLOTS.length + 1) {
-            for (let i = 0; i < lessonCount; i++) {
-              newSchedule.push({
-                id: Math.random().toString(36).substr(2, 9),
-                groupId: group.id,
-                subjectId: subject.id,
-                teacherId: teacher.id,
-                day: DAYS[currentDay],
-                slot: currentSlot + i,
-                type: subject.type
-              });
-            }
-            currentSlot += lessonCount;
-            if (currentSlot > SLOTS.length) {
-              currentSlot = 1;
-              currentDay++;
-            }
-          }
-        });
-      });
-
-      setSchedule(newSchedule);
-      setIsGenerating(false);
-    }, 1000);
-  };
-
-  // --- PDF Export Simulyatsiyasi ---
-  const handleExportPDF = () => {
-    const printContent = document.getElementById('printable-schedule');
-    const originalContents = document.body.innerHTML;
-    window.print();
-  };
-
-  const getLesson = (day, slotId, groupId) => {
-    return schedule.find(s => s.day === day && s.slot === slotId && s.groupId === groupId);
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* Navbar */}
-      <nav className="bg-white border-b sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
-            <Calendar className="text-white" size={24} />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">Gema Schedule <span className="text-blue-600">PRO</span></h1>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setView(view === 'user' ? 'admin' : 'user')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-              view === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
-            }`}
-          >
-            {view === 'admin' ? <Settings size={16} /> : <UserCheck size={16} />}
-            {view === 'admin' ? "Admin Panel" : "Foydalanuvchi"}
-          </button>
-          
-          {view === 'admin' && (
-            <button 
-              onClick={generateSchedule}
-              disabled={isGenerating}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-lg shadow-blue-200 disabled:opacity-50 transition-all"
-            >
-              {isGenerating ? "Hisoblanmoqda..." : "Avto-Generator"}
-            </button>
-          )}
-          
-          <button 
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-full text-sm font-medium"
-          >
-            <Download size={16} /> Export PDF
-          </button>
-        </div>
-      </nav>
-
-      <main className="p-6 max-w-[1600px] mx-auto grid grid-cols-12 gap-6">
-        
-        {/* Sidebar Controls */}
-        <div className="col-span-12 lg:col-span-3 space-y-6">
-          <div className="bg-white p-5 rounded-2xl border shadow-sm">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Filtrlash</h3>
-            <label className="block text-sm font-medium mb-2">Guruhni tanlang</label>
-            <select 
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-            >
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name} (Semestr {g.semester})</option>)}
-            </select>
-          </div>
-
-          {view === 'admin' && (
-            <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Boshqaruv</h3>
-              <button onClick={() => setActiveTab('groups')} className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'groups' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'}`}>
-                <Users size={18} /> Guruhlar
-              </button>
-              <button onClick={() => setActiveTab('teachers')} className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'teachers' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'}`}>
-                <UserCheck size={18} /> O'qituvchilar
-              </button>
-              <button onClick={() => setActiveTab('subjects')} className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'subjects' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'}`}>
-                <BookOpen size={18} /> Fanlar
-              </button>
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICHTU - Avtomatik Dars Jadvali</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .schedule-grid { display: grid; grid-template-columns: 100px repeat(6, 1fr); gap: 6px; }
+        .slot-card { min-height: 90px; transition: all 0.2s; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: 8px; padding: 4px; }
+        .slot-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .conflict { background-color: #fee2e2; border: 2px solid #ef4444; color: #b91c1c; }
+        .normal { background-color: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1; }
+        .practical { background-color: #dcfce7; border: 1px solid #86efac; color: #15803d; }
+        .empty-slot { background-color: #ffffff; border: 1px dashed #cbd5e1; color: #94a3b8; }
+        .closed-day { background-color: #f1f5f9; border: 1px solid #e2e8f0; opacity: 0.6; cursor: not-allowed; }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+    <div id="app" class="max-w-[1600px] mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="mb-4 md:mb-0">
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">📘 DARS JADVALI TIZIMI</h1>
+                <p class="text-slate-500 text-sm font-medium">ICHTU • Avtomatik optimallashtirish va boshqaruv</p>
             </div>
-          )}
-
-          <div className="bg-blue-900 text-white p-6 rounded-2xl shadow-xl">
-            <h4 className="font-bold mb-2 flex items-center gap-2 italic">
-              <Info size={16} /> Ma'lumot
-            </h4>
-            <p className="text-xs text-blue-100 leading-relaxed">
-              Tizim avtomatik ravishda amaliy darslarni (6 soat) blok ko'rinishida joylashtiradi. Konfliktlar qizil rangda belgilanadi.
-            </p>
-          </div>
-        </div>
-
-        {/* Main Schedule Canvas */}
-        <div className="col-span-12 lg:col-span-9 bg-white rounded-2xl border shadow-sm overflow-hidden" id="printable-schedule">
-          <div className="p-6 border-b flex justify-between items-center bg-slate-50/50">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Haftalik Dars Jadvali</h2>
-              <p className="text-sm text-slate-500">Guruh: {groups.find(g => g.id === selectedGroup)?.name}</p>
+            <div class="flex gap-3">
+                <button onclick="generateSchedule()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95">
+                    🔄 Jadvalni Hisoblash
+                </button>
+                <button onclick="exportToPDF()" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-slate-300 transition-all active:scale-95">
+                    📥 PDF Eksport
+                </button>
             </div>
-            <div className="flex gap-2">
-               <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-green-100 text-green-700 rounded-full">
-                 <div className="w-2 h-2 bg-green-500 rounded-full"></div> Optimal
-               </div>
-               <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-red-100 text-red-700 rounded-full">
-                 <div className="w-2 h-2 bg-red-500 rounded-full"></div> Konflikt
-               </div>
-            </div>
-          </div>
+        </header>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="p-4 border bg-slate-50 text-xs font-bold text-slate-400 uppercase text-left w-24">Vaqt / Kun</th>
-                  {DAYS.map(day => (
-                    <th key={day} className="p-4 border bg-slate-50 text-sm font-bold text-slate-700 min-w-[160px]">
-                      {day}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {SLOTS.map(slot => (
-                  <tr key={slot.id}>
-                    <td className="p-4 border bg-slate-50/30">
-                      <div className="text-xs font-bold text-blue-600 mb-1">{slot.id}-PARA</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{slot.time}</div>
-                    </td>
-                    {DAYS.map(day => {
-                      const lesson = getLesson(day, slot.id, selectedGroup);
-                      const subj = lesson ? subjects.find(s => s.id === lesson.subjectId) : null;
-                      const teacher = lesson ? teachers.find(t => t.id === lesson.teacherId) : null;
-
-                      return (
-                        <td key={day} className="p-2 border group relative align-top h-32">
-                          {lesson ? (
-                            <div 
-                              className={`h-full w-full rounded-xl p-3 shadow-sm border-l-4 transition-all hover:scale-[1.02] cursor-pointer`}
-                              style={{ 
-                                backgroundColor: `${subj?.color}15`, 
-                                borderColor: subj?.color || '#cbd5e1' 
-                              }}
-                            >
-                              <div className="flex justify-between items-start mb-2">
-                                <span 
-                                  className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter"
-                                  style={{ backgroundColor: subj?.color, color: 'white' }}
-                                >
-                                  {lesson.type}
-                                </span>
-                                {view === 'admin' && <Trash2 size={12} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />}
-                              </div>
-                              <h4 className="text-xs font-black text-slate-800 uppercase leading-tight mb-1">
-                                {subj?.name}
-                              </h4>
-                              <p className="text-[11px] text-slate-600 font-medium">
-                                {teacher?.lastName} {teacher?.firstName[0]}.
-                              </p>
-                              
-                              {/* Tooltip on hover */}
-                              <div className="absolute inset-0 bg-black/80 text-white p-3 rounded-xl opacity-0 group-hover:opacity-100 z-10 transition-opacity pointer-events-none flex flex-col justify-center text-center">
-                                <p className="text-xs font-bold">{subj?.name}</p>
-                                <p className="text-[10px] text-blue-300">{teacher?.lastName} {teacher?.firstName}</p>
-                                <div className="mt-2 border-t border-white/20 pt-2 text-[9px] uppercase tracking-widest">Batafsil</div>
-                              </div>
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <!-- Sidebar -->
+            <aside class="xl:col-span-1 space-y-6">
+                <!-- Ma'lumotlar Kiritish -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="font-bold text-slate-800 mb-5 flex items-center gap-2 text-lg">
+                        <span class="w-2 h-6 bg-indigo-500 rounded-full"></span>
+                        Ma'lumotlar Kiritish
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guruh Nomi</label>
+                            <input id="groupName" type="text" placeholder="Masalan: 211-Guruh" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">O'qituvchi (F.I.)</label>
+                            <input id="teacherName" type="text" placeholder="Aliyev V." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Fan va Hajmi (Soat)</label>
+                            <div class="flex gap-2">
+                                <input id="subjectName" type="text" placeholder="Fan nomi" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                                <input id="subjectHours" type="number" placeholder="36" class="w-20 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
                             </div>
-                          ) : (
-                            <div className="h-full w-full border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center group-hover:bg-slate-50 transition-colors">
-                              {view === 'admin' && <Plus size={16} className="text-slate-200 group-hover:text-blue-400" />}
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Turi</label>
+                                <select id="subjectType" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                                    <option value="amaliy">Amaliy (6s)</option>
+                                    <option value="nazariy">Nazariy (2s)</option>
+                                </select>
                             </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          
-          {/* PDF Footer for verification */}
-          <div className="hidden print:block mt-12 px-8 py-10 border-t-2 border-slate-200">
-             <div className="grid grid-cols-2 gap-20">
-                <div className="space-y-4">
-                   <h5 className="font-bold text-sm">TASDIQLAYMAN:</h5>
-                   <div className="h-px bg-slate-400 w-48 mt-8"></div>
-                   <p className="text-xs font-medium">O'quv ishlari bo'yicha prorektor</p>
-                   <p className="text-xs">F.I.O: ________________________</p>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Prioritet</label>
+                                <input id="priority" type="number" value="1" min="1" max="10" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
+                            </div>
+                        </div>
+                        <button onclick="addData()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-3 rounded-xl border border-indigo-200 transition-all active:scale-95 mt-2">
+                            ➕ Ro'yxatga Qo'shish
+                        </button>
+                    </div>
                 </div>
-                <div className="text-right space-y-2">
-                   <p className="text-xs font-bold italic">ICHTU Axborot Tizimi</p>
-                   <p className="text-[10px] text-slate-400">Yaratilgan sana: {new Date().toLocaleDateString()}</p>
+
+                <!-- Fanlar Ro'yxati -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="font-bold text-slate-800 mb-4 flex items-center justify-between">
+                        Kiritilgan Fanlar
+                        <span id="subjectCount" class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full">0 ta</span>
+                    </h2>
+                    <div id="dataList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                        <p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>
+                    </div>
                 </div>
-             </div>
-          </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="xl:col-span-3 space-y-6">
+                <!-- Kunlik Juftliklar Sozlamasi (Customizable) -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Haftalik kunlar va maksimal juftliklar soni</h2>
+                    <div id="daySettings" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <!-- JS orqali generatsiya qilinadi -->
+                    </div>
+                </div>
+
+                <!-- Jadval Maydoni -->
+                <div id="printableArea" class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <!-- PDF Header (Hidden in Web) -->
+                    <div id="pdfHeader" class="hidden mb-8">
+                        <div class="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+                            <div class="w-1/3">
+                                <p class="font-black text-sm">"TASDIQLAYMAN"</p>
+                                <p class="text-[10px] text-slate-600 mt-1 uppercase">O'quv ishlari bo'yicha prorektor</p>
+                                <div class="mt-8 border-b border-slate-400 w-48"></div>
+                                <p class="text-[10px] mt-1 italic">F.I.O. _________________</p>
+                            </div>
+                            <div class="w-1/3 text-center">
+                                <h2 class="text-3xl font-black text-slate-900 leading-none">ICHTU</h2>
+                                <p class="text-xs font-bold mt-2 uppercase tracking-widest text-slate-500 italic">Oliy ta'lim muassasasi</p>
+                                <div class="mt-4 inline-block bg-slate-900 text-white px-4 py-1 rounded text-[10px] font-bold">2024-2025 O'QUV YILI</div>
+                            </div>
+                            <div class="w-1/3 text-right">
+                                <p class="text-[10px] font-bold uppercase text-slate-400">Hujjat raqami: #JAD-2024-001</p>
+                                <p class="text-xs mt-2">Sana: <span id="currentDate" class="font-bold"></span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 id="scheduleTitle" class="text-center font-black text-2xl mb-6 text-slate-800 uppercase tracking-tight">
+                        DARS JADVALI: <span id="activeGroupDisplay" class="text-indigo-600 underline decoration-indigo-200">---</span>
+                    </h2>
+
+                    <!-- Jadval Sarlavhasi -->
+                    <div class="schedule-grid text-center font-black text-[11px] text-slate-400 uppercase tracking-widest mb-4">
+                        <div class="py-2">Vaqt / Kun</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Dushanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Seshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Chorshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Payshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Juma</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Shanba</div>
+                    </div>
+
+                    <div id="scheduleBody" class="space-y-1.5 min-w-[900px]">
+                        <!-- JS orqali generatsiya qilinadi -->
+                    </div>
+
+                    <!-- PDF Footer (Hidden in Web) -->
+                    <div id="pdfFooter" class="hidden mt-12 border-t-2 border-slate-100 pt-8">
+                        <div class="grid grid-cols-2 gap-12">
+                            <div>
+                                <h3 class="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider underline">Mas'ul o'qituvchilar</h3>
+                                <ul id="teacherListFooter" class="text-[10px] space-y-2 text-slate-600 columns-2">
+                                    <!-- Dinamik -->
+                                </ul>
+                            </div>
+                            <div class="flex flex-col items-end justify-between">
+                                <div class="text-right">
+                                    <p class="text-sm font-bold text-slate-900">ICHTU O'QUV BO'LIMI</p>
+                                    <p class="text-[9px] text-slate-500">Tizim orqali avtomatik shakllantirildi</p>
+                                </div>
+                                <div class="mt-8 text-center border-t border-slate-900 pt-2 w-48">
+                                    <p class="text-[10px] font-bold uppercase">Bo'lim boshlig'i imzosi</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
         </div>
-      </main>
-
-      {/* Floating Status Bar */}
-      <div className="fixed bottom-6 right-6 flex items-center gap-3">
-        {schedule.length > 0 && (
-          <div className="bg-white border shadow-2xl rounded-2xl p-4 flex items-center gap-6 animate-in slide-in-from-bottom-4">
-             <div className="flex items-center gap-2">
-                <CheckCircle2 size={20} className="text-green-500" />
-                <div>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase">Status</p>
-                   <p className="text-xs font-bold">Xatosiz yaratildi</p>
-                </div>
-             </div>
-             <div className="w-px h-8 bg-slate-100"></div>
-             <div className="flex items-center gap-2 text-blue-600">
-                <p className="text-xs font-black uppercase tracking-widest">Ver: 1.0.4</p>
-             </div>
-          </div>
-        )}
-      </div>
-
-      <style>{`
-        @media print {
-          body { background: white; }
-          .no-print, nav, .lg\\:col-span-3, .fixed { display: none !important; }
-          .lg\\:col-span-9 { width: 100% !important; border: none !important; box-shadow: none !important; }
-          table { width: 100% !important; border: 1px solid #eee; }
-          .print\\:block { display: block !important; }
-        }
-      `}</style>
     </div>
-  );
-};
 
-export default App;
+    <script>
+        // State
+        let appData = {
+            subjects: [],
+            schedule: {}, 
+            groups: new Set(),
+            teachers: new Set(),
+            dayLimits: [8, 8, 8, 8, 8, 8] // Har kunlik default 4 juftlik (8 soat)
+        };
+
+        const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+        const TIME_SLOTS = ["08:30 - 09:50", "10:00 - 11:20", "11:30 - 12:50", "13:30 - 14:50", "15:00 - 16:20"];
+
+        // Init Day Settings UI
+        function initDaySettings() {
+            const container = document.getElementById('daySettings');
+            container.innerHTML = DAYS.map((day, idx) => `
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">${day}</label>
+                    <select onchange="updateDayLimit(${idx}, this.value)" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="0">Yopiq</option>
+                        <option value="2">1 Juftlik (2s)</option>
+                        <option value="4">2 Juftlik (4s)</option>
+                        <option value="6">3 Juftlik (6s)</option>
+                        <option value="8" selected>4 Juftlik (8s)</option>
+                        <option value="10">5 Juftlik (10s)</option>
+                    </select>
+                </div>
+            `).join('');
+        }
+
+        function updateDayLimit(idx, val) {
+            appData.dayLimits[idx] = parseInt(val);
+        }
+
+        function addData() {
+            const group = document.getElementById('groupName').value.trim();
+            const teacher = document.getElementById('teacherName').value.trim();
+            const name = document.getElementById('subjectName').value.trim().toUpperCase();
+            const hours = parseInt(document.getElementById('subjectHours').value);
+            const type = document.getElementById('subjectType').value;
+            const priority = parseInt(document.getElementById('priority').value);
+
+            if (!group || !teacher || !name || isNaN(hours)) {
+                alert("Iltimos, barcha ma'lumotlarni to'liq kiriting!");
+                return;
+            }
+
+            const subjectObj = {
+                id: Date.now(),
+                group,
+                teacher,
+                name,
+                totalHours: hours,
+                remainingHours: hours,
+                type,
+                priority,
+                color: type === 'amaliy' ? 'practical' : 'normal'
+            };
+
+            appData.subjects.push(subjectObj);
+            appData.groups.add(group);
+            appData.teachers.add(teacher);
+            
+            updateDataList();
+            document.getElementById('subjectName').value = '';
+            document.getElementById('subjectHours').value = '';
+            document.getElementById('subjectName').focus();
+        }
+
+        function updateDataList() {
+            const list = document.getElementById('dataList');
+            const count = document.getElementById('subjectCount');
+            count.innerText = `${appData.subjects.length} ta`;
+
+            if (appData.subjects.length === 0) {
+                list.innerHTML = `<p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>`;
+                return;
+            }
+
+            list.innerHTML = appData.subjects.map(s => `
+                <div class="group relative bg-white p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all">
+                    <div class="flex justify-between items-start">
+                        <div class="pr-6">
+                            <span class="text-xs font-black text-slate-800 block leading-tight">${s.name}</span>
+                            <div class="text-[10px] text-slate-500 mt-1">
+                                <span class="bg-slate-100 px-1.5 py-0.5 rounded mr-1">${s.type.toUpperCase()}</span>
+                                <span>${s.teacher}</span> • <span>${s.totalHours}s</span>
+                            </div>
+                        </div>
+                        <button onclick="removeData(${s.id})" class="text-slate-300 hover:text-red-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                    <div class="absolute bottom-2 right-2 flex gap-1">
+                         <span class="text-[9px] font-bold text-indigo-400">P:${s.priority}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function removeData(id) {
+            appData.subjects = appData.subjects.filter(s => s.id !== id);
+            updateDataList();
+        }
+
+        function generateSchedule() {
+            const groupList = Array.from(appData.groups);
+            if (groupList.length === 0) {
+                alert("Avval guruh va fanlarni qo'shing!");
+                return;
+            }
+
+            const targetGroup = groupList[0]; // Soddalik uchun birinchi guruh
+            document.getElementById('activeGroupDisplay').innerText = targetGroup;
+            appData.schedule = {}; 
+
+            // Algoritm: Priority va Type bo'yicha saralash
+            const sortedSubjects = [...appData.subjects]
+                .filter(s => s.group === targetGroup)
+                .sort((a, b) => {
+                    if (a.priority !== b.priority) return a.priority - b.priority;
+                    if (a.type === 'amaliy' && b.type !== 'amaliy') return -1;
+                    return 0;
+                });
+
+            sortedSubjects.forEach(s => s.remainingHours = s.totalHours);
+
+            const teacherLoad = {}; 
+            const lastDayTaught = {}; 
+
+            for (let s of sortedSubjects) {
+                const blockSize = s.type === 'amaliy' ? 6 : 2; 
+                
+                while (s.remainingHours >= blockSize) {
+                    let placed = false;
+
+                    for (let dayIdx = 0; dayIdx < 6; dayIdx++) {
+                        if (placed) break;
+                        const maxPairs = appData.dayLimits[dayIdx] / 2;
+                        if (maxPairs === 0) continue;
+
+                        if (s.type === 'amaliy' && lastDayTaught[s.id] === dayIdx - 1) continue;
+
+                        const currentTeacherLoad = teacherLoad[`${s.teacher}_${dayIdx}`] || 0;
+                        if (currentTeacherLoad + blockSize > 10) continue;
+
+                        const slotsNeeded = blockSize / 2;
+
+                        for (let slotIdx = 0; slotIdx <= maxPairs - slotsNeeded; slotIdx++) {
+                            // Nazariy dars 1 yoki 4 juftlikka qo'yiladi (qoida bo'yicha)
+                            if (s.type === 'nazariy' && slotIdx !== 0 && slotIdx !== 3) continue;
+
+                            let canPlace = true;
+                            for (let i = 0; i < slotsNeeded; i++) {
+                                if (appData.schedule[`${dayIdx}_${slotIdx + i}`]) {
+                                    canPlace = false;
+                                    break;
+                                }
+                            }
+
+                            if (canPlace) {
+                                for (let i = 0; i < slotsNeeded; i++) {
+                                    appData.schedule[`${dayIdx}_${slotIdx + i}`] = { ...s };
+                                }
+                                s.remainingHours -= blockSize;
+                                teacherLoad[`${s.teacher}_${dayIdx}`] = currentTeacherLoad + blockSize;
+                                lastDayTaught[s.id] = dayIdx;
+                                placed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!placed) break; 
+                }
+            }
+            renderSchedule();
+        }
+
+        function renderSchedule() {
+            const body = document.getElementById('scheduleBody');
+            body.innerHTML = '';
+
+            for (let slotIdx = 0; slotIdx < 5; slotIdx++) {
+                let rowHtml = `<div class="schedule-grid">
+                    <div class="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-xl p-2 shadow-inner">
+                        <span class="text-[10px] font-black text-indigo-500">${slotIdx + 1}-JUFTLIK</span>
+                        <span class="text-[9px] font-bold text-slate-400 mt-1">${TIME_SLOTS[slotIdx]}</span>
+                    </div>`;
+                
+                for (let dayIdx = 0; dayIdx < 6; dayIdx++) {
+                    const data = appData.schedule[`${dayIdx}_${slotIdx}`];
+                    const isClosed = (appData.dayLimits[dayIdx] / 2) <= slotIdx;
+                    
+                    let cellClasses = "slot-card ";
+                    if (isClosed) cellClasses += "closed-day";
+                    else if (data) cellClasses += data.type === 'amaliy' ? "practical" : "normal";
+                    else cellClasses += "empty-slot";
+
+                    rowHtml += `
+                        <div class="${cellClasses}" onclick="toggleCellState(${dayIdx}, ${slotIdx})">
+                            ${data ? `
+                                <div class="text-[10px] font-black uppercase tracking-tighter leading-none mb-1">${data.name}</div>
+                                <div class="text-[9px] font-medium text-slate-500 truncate w-full px-1">${data.teacher}</div>
+                                <div class="mt-1 bg-white/50 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">${data.type}</div>
+                            ` : (isClosed ? '<span class="text-[8px] font-black opacity-30">YOPIQ</span>' : '')}
+                        </div>
+                    `;
+                }
+                rowHtml += `</div>`;
+                body.innerHTML += rowHtml;
+            }
+        }
+
+        function toggleCellState(day, slot) {
+            const el = event.currentTarget;
+            if (el.classList.contains('closed-day')) return;
+            el.classList.toggle('conflict');
+        }
+
+        async function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const header = document.getElementById('pdfHeader');
+            const footer = document.getElementById('pdfFooter');
+            const currentDate = document.getElementById('currentDate');
+            const teacherList = document.getElementById('teacherListFooter');
+
+            currentDate.innerText = new Date().toLocaleDateString('uz-UZ');
+            header.classList.remove('hidden');
+            footer.classList.remove('hidden');
+            
+            teacherList.innerHTML = Array.from(appData.teachers).map(t => `<li>• ${t}</li>`).join('');
+
+            const element = document.getElementById('printableArea');
+            
+            try {
+                const canvas = await html2canvas(element, { 
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff'
+                });
+                
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`Jadval_${document.getElementById('activeGroupDisplay').innerText}.pdf`);
+            } catch (err) {
+                console.error("PDF generation error:", err);
+            } finally {
+                header.classList.add('hidden');
+                footer.classList.add('hidden');
+            }
+        }
+
+        // Init
+        initDaySettings();
+        renderSchedule();
+    </script>
+</body>
+</html>
