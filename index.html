@@ -18,6 +18,9 @@
         .practical { background-color: #dcfce7; border: 1px solid #86efac; color: #15803d; }
         .empty-slot { background-color: #ffffff; border: 1px dashed #cbd5e1; color: #94a3b8; }
         .closed-day { background-color: #f1f5f9; border: 1px solid #e2e8f0; opacity: 0.6; cursor: not-allowed; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
 <body class="p-4 md:p-6">
@@ -26,9 +29,16 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <div class="mb-4 md:mb-0">
                 <h1 class="text-2xl font-black text-slate-800 tracking-tight">📘 DARS JADVALI TIZIMI</h1>
-                <p class="text-slate-500 text-sm font-medium">ICHTU • Avtomatik optimallashtirish va boshqaruv</p>
+                <p class="text-slate-500 text-sm font-medium">ICHTU • Avtomatik optimallashtirish va semestr boshqaruvi</p>
             </div>
             <div class="flex gap-3">
+                <div class="flex items-center bg-slate-100 rounded-xl px-3 border border-slate-200">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mr-2">Semestr:</label>
+                    <select id="activeSemesterFilter" class="bg-transparent text-sm font-bold outline-none py-2">
+                        <option value="1">1-Semestr</option>
+                        <option value="2">2-Semestr</option>
+                    </select>
+                </div>
                 <button onclick="generateSchedule()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95">
                     🔄 Jadvalni Hisoblash
                 </button>
@@ -45,26 +55,39 @@
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <h2 class="font-bold text-slate-800 mb-5 flex items-center gap-2 text-lg">
                         <span class="w-2 h-6 bg-indigo-500 rounded-full"></span>
-                        Ma'lumotlar Kiritish
+                        Fan Kiritish
                     </h2>
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guruh Nomi</label>
-                            <input id="groupName" type="text" placeholder="Masalan: 211-Guruh" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guruhni Tanlang</label>
+                            <div class="flex gap-2">
+                                <select id="groupSelect" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition"></select>
+                                <button onclick="promptNewItem('group')" class="bg-slate-200 p-2.5 rounded-lg hover:bg-slate-300">➕</button>
+                            </div>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">O'qituvchi (F.I.)</label>
-                            <input id="teacherName" type="text" placeholder="Aliyev V." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">O'qituvchini Tanlang</label>
+                            <div class="flex gap-2">
+                                <select id="teacherSelect" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition"></select>
+                                <button onclick="promptNewItem('teacher')" class="bg-slate-200 p-2.5 rounded-lg hover:bg-slate-300">➕</button>
+                            </div>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Fan va Hajmi (Soat)</label>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Fan nomi va Semestr</label>
                             <div class="flex gap-2">
                                 <input id="subjectName" type="text" placeholder="Fan nomi" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                                <input id="subjectHours" type="number" placeholder="36" class="w-20 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
+                                <select id="subjectSemester" class="w-24 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                                    <option value="1">1-Sem</option>
+                                    <option value="2">2-Sem</option>
+                                </select>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Hajmi (Soat)</label>
+                                <input id="subjectHours" type="number" placeholder="36" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
+                            </div>
                             <div>
                                 <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Turi</label>
                                 <select id="subjectType" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
@@ -72,10 +95,10 @@
                                     <option value="nazariy">Nazariy (2s)</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Prioritet</label>
-                                <input id="priority" type="number" value="1" min="1" max="10" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
-                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Prioritet (1-10)</label>
+                            <input id="priority" type="number" value="1" min="1" max="10" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
                         </div>
                         <button onclick="addData()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-3 rounded-xl border border-indigo-200 transition-all active:scale-95 mt-2">
                             ➕ Ro'yxatga Qo'shish
@@ -89,7 +112,7 @@
                         Kiritilgan Fanlar
                         <span id="subjectCount" class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full">0 ta</span>
                     </h2>
-                    <div id="dataList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div id="dataList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                         <p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>
                     </div>
                 </div>
@@ -97,7 +120,7 @@
 
             <!-- Main Content -->
             <main class="xl:col-span-3 space-y-6">
-                <!-- Kunlik Juftliklar Sozlamasi (Customizable) -->
+                <!-- Kunlik Juftliklar Sozlamasi -->
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <h2 class="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Haftalik kunlar va maksimal juftliklar soni</h2>
                     <div id="daySettings" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -107,7 +130,7 @@
 
                 <!-- Jadval Maydoni -->
                 <div id="printableArea" class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
-                    <!-- PDF Header (Hidden in Web) -->
+                    <!-- PDF Header -->
                     <div id="pdfHeader" class="hidden mb-8">
                         <div class="flex justify-between items-start border-b-2 border-slate-900 pb-6">
                             <div class="w-1/3">
@@ -130,6 +153,7 @@
 
                     <h2 id="scheduleTitle" class="text-center font-black text-2xl mb-6 text-slate-800 uppercase tracking-tight">
                         DARS JADVALI: <span id="activeGroupDisplay" class="text-indigo-600 underline decoration-indigo-200">---</span>
+                        <div class="text-xs text-slate-400 mt-1" id="activeSemesterDisplay">1-SEMESTR</div>
                     </h2>
 
                     <!-- Jadval Sarlavhasi -->
@@ -147,7 +171,7 @@
                         <!-- JS orqali generatsiya qilinadi -->
                     </div>
 
-                    <!-- PDF Footer (Hidden in Web) -->
+                    <!-- PDF Footer -->
                     <div id="pdfFooter" class="hidden mt-12 border-t-2 border-slate-100 pt-8">
                         <div class="grid grid-cols-2 gap-12">
                             <div>
@@ -172,20 +196,32 @@
         </div>
     </div>
 
+    <!-- Simple Custom Modal for Input -->
+    <div id="customModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 id="modalTitle" class="text-lg font-bold mb-4">Yangi qo'shish</h3>
+            <input id="modalInput" type="text" class="w-full p-3 border border-slate-200 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-indigo-500">
+            <div class="flex gap-2">
+                <button onclick="closeModal()" class="flex-1 bg-slate-100 py-2 rounded-xl font-bold">Bekor qilish</button>
+                <button id="modalConfirm" class="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-bold">Saqlash</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // State
         let appData = {
             subjects: [],
             schedule: {}, 
-            groups: new Set(),
-            teachers: new Set(),
-            dayLimits: [8, 8, 8, 8, 8, 8] // Har kunlik default 4 juftlik (8 soat)
+            groups: ["211-Guruh", "212-Guruh"],
+            teachers: ["Aliyev V.", "Usmonov J.", "Karimov S."],
+            dayLimits: [8, 8, 8, 8, 8, 8]
         };
 
         const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
         const TIME_SLOTS = ["08:30 - 09:50", "10:00 - 11:20", "11:30 - 12:50", "13:30 - 14:50", "15:00 - 16:20"];
 
-        // Init Day Settings UI
+        // UI Helpers
         function initDaySettings() {
             const container = document.getElementById('daySettings');
             container.innerHTML = DAYS.map((day, idx) => `
@@ -193,31 +229,64 @@
                     <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">${day}</label>
                     <select onchange="updateDayLimit(${idx}, this.value)" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="0">Yopiq</option>
-                        <option value="2">1 Juftlik (2s)</option>
-                        <option value="4">2 Juftlik (4s)</option>
-                        <option value="6">3 Juftlik (6s)</option>
-                        <option value="8" selected>4 Juftlik (8s)</option>
-                        <option value="10">5 Juftlik (10s)</option>
+                        <option value="2">1 Juftlik</option>
+                        <option value="4">2 Juftlik</option>
+                        <option value="6">3 Juftlik</option>
+                        <option value="8" selected>4 Juftlik</option>
+                        <option value="10">5 Juftlik</option>
                     </select>
                 </div>
             `).join('');
+        }
+
+        function updateDropdowns() {
+            const groupSelect = document.getElementById('groupSelect');
+            const teacherSelect = document.getElementById('teacherSelect');
+            
+            groupSelect.innerHTML = appData.groups.map(g => `<option value="${g}">${g}</option>`).join('');
+            teacherSelect.innerHTML = appData.teachers.map(t => `<option value="${t}">${t}</option>`).join('');
         }
 
         function updateDayLimit(idx, val) {
             appData.dayLimits[idx] = parseInt(val);
         }
 
+        // Modal Logic
+        let currentModalTarget = '';
+        function promptNewItem(type) {
+            currentModalTarget = type;
+            document.getElementById('modalTitle').innerText = type === 'group' ? 'Yangi Guruh' : 'Yangi O\'qituvchi';
+            document.getElementById('modalInput').value = '';
+            document.getElementById('customModal').classList.remove('hidden');
+            document.getElementById('modalInput').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('customModal').classList.add('hidden');
+        }
+
+        document.getElementById('modalConfirm').onclick = () => {
+            const val = document.getElementById('modalInput').value.trim();
+            if (val) {
+                if (currentModalTarget === 'group') appData.groups.push(val);
+                else appData.teachers.push(val);
+                updateDropdowns();
+                closeModal();
+            }
+        };
+
+        // Data Management
         function addData() {
-            const group = document.getElementById('groupName').value.trim();
-            const teacher = document.getElementById('teacherName').value.trim();
+            const group = document.getElementById('groupSelect').value;
+            const teacher = document.getElementById('teacherSelect').value;
             const name = document.getElementById('subjectName').value.trim().toUpperCase();
+            const semester = document.getElementById('subjectSemester').value;
             const hours = parseInt(document.getElementById('subjectHours').value);
             const type = document.getElementById('subjectType').value;
             const priority = parseInt(document.getElementById('priority').value);
 
-            if (!group || !teacher || !name || isNaN(hours)) {
-                alert("Iltimos, barcha ma'lumotlarni to'liq kiriting!");
-                return;
+            if (!name || isNaN(hours)) {
+                return; // Silently fail or add visual feedback
             }
 
             const subjectObj = {
@@ -225,6 +294,7 @@
                 group,
                 teacher,
                 name,
+                semester,
                 totalHours: hours,
                 remainingHours: hours,
                 type,
@@ -233,19 +303,14 @@
             };
 
             appData.subjects.push(subjectObj);
-            appData.groups.add(group);
-            appData.teachers.add(teacher);
-            
             updateDataList();
             document.getElementById('subjectName').value = '';
             document.getElementById('subjectHours').value = '';
-            document.getElementById('subjectName').focus();
         }
 
         function updateDataList() {
             const list = document.getElementById('dataList');
-            const count = document.getElementById('subjectCount');
-            count.innerText = `${appData.subjects.length} ta`;
+            document.getElementById('subjectCount').innerText = `${appData.subjects.length} ta`;
 
             if (appData.subjects.length === 0) {
                 list.innerHTML = `<p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>`;
@@ -253,21 +318,19 @@
             }
 
             list.innerHTML = appData.subjects.map(s => `
-                <div class="group relative bg-white p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all">
+                <div class="relative bg-white p-3 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all shadow-sm">
                     <div class="flex justify-between items-start">
                         <div class="pr-6">
                             <span class="text-xs font-black text-slate-800 block leading-tight">${s.name}</span>
-                            <div class="text-[10px] text-slate-500 mt-1">
-                                <span class="bg-slate-100 px-1.5 py-0.5 rounded mr-1">${s.type.toUpperCase()}</span>
+                            <div class="text-[9px] text-slate-500 mt-1 space-x-1">
+                                <span class="bg-indigo-50 text-indigo-600 px-1 rounded font-bold">${s.semester}-sem</span>
+                                <span class="bg-slate-100 px-1 rounded">${s.type.toUpperCase()}</span>
                                 <span>${s.teacher}</span> • <span>${s.totalHours}s</span>
                             </div>
                         </div>
-                        <button onclick="removeData(${s.id})" class="text-slate-300 hover:text-red-500 transition-colors">
+                        <button onclick="removeData(${s.id})" class="text-slate-300 hover:text-red-500">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
-                    </div>
-                    <div class="absolute bottom-2 right-2 flex gap-1">
-                         <span class="text-[9px] font-bold text-indigo-400">P:${s.priority}</span>
                     </div>
                 </div>
             `).join('');
@@ -278,30 +341,33 @@
             updateDataList();
         }
 
+        // Generator Logic
         function generateSchedule() {
-            const groupList = Array.from(appData.groups);
+            const activeSemester = document.getElementById('activeSemesterFilter').value;
+            const groupList = Array.from(new Set(appData.subjects.map(s => s.group)));
+            
             if (groupList.length === 0) {
-                alert("Avval guruh va fanlarni qo'shing!");
+                alert("Fanlar kiritilmagan!");
                 return;
             }
 
-            const targetGroup = groupList[0]; // Soddalik uchun birinchi guruh
+            // Soddalik uchun birinchi guruhni ko'rsatamiz
+            const targetGroup = groupList[0];
             document.getElementById('activeGroupDisplay').innerText = targetGroup;
+            document.getElementById('activeSemesterDisplay').innerText = `${activeSemester}-SEMESTR`;
             appData.schedule = {}; 
 
-            // Algoritm: Priority va Type bo'yicha saralash
+            // Algoritm: Faqat tanlangan semestr va guruh uchun
             const sortedSubjects = [...appData.subjects]
-                .filter(s => s.group === targetGroup)
+                .filter(s => s.group === targetGroup && s.semester === activeSemester)
                 .sort((a, b) => {
-                    if (a.priority !== b.priority) return a.priority - b.priority;
-                    if (a.type === 'amaliy' && b.type !== 'amaliy') return -1;
-                    return 0;
+                    if (a.priority !== b.priority) return b.priority - a.priority;
+                    return (a.type === 'amaliy' ? -1 : 1);
                 });
 
             sortedSubjects.forEach(s => s.remainingHours = s.totalHours);
 
-            const teacherLoad = {}; 
-            const lastDayTaught = {}; 
+            const teacherDayLoad = {}; 
 
             for (let s of sortedSubjects) {
                 const blockSize = s.type === 'amaliy' ? 6 : 2; 
@@ -314,17 +380,13 @@
                         const maxPairs = appData.dayLimits[dayIdx] / 2;
                         if (maxPairs === 0) continue;
 
-                        if (s.type === 'amaliy' && lastDayTaught[s.id] === dayIdx - 1) continue;
-
-                        const currentTeacherLoad = teacherLoad[`${s.teacher}_${dayIdx}`] || 0;
-                        if (currentTeacherLoad + blockSize > 10) continue;
+                        const teacherKey = `${s.teacher}_${dayIdx}`;
+                        const currentLoad = teacherDayLoad[teacherKey] || 0;
+                        if (currentLoad + blockSize > 10) continue;
 
                         const slotsNeeded = blockSize / 2;
 
                         for (let slotIdx = 0; slotIdx <= maxPairs - slotsNeeded; slotIdx++) {
-                            // Nazariy dars 1 yoki 4 juftlikka qo'yiladi (qoida bo'yicha)
-                            if (s.type === 'nazariy' && slotIdx !== 0 && slotIdx !== 3) continue;
-
                             let canPlace = true;
                             for (let i = 0; i < slotsNeeded; i++) {
                                 if (appData.schedule[`${dayIdx}_${slotIdx + i}`]) {
@@ -338,8 +400,7 @@
                                     appData.schedule[`${dayIdx}_${slotIdx + i}`] = { ...s };
                                 }
                                 s.remainingHours -= blockSize;
-                                teacherLoad[`${s.teacher}_${dayIdx}`] = currentTeacherLoad + blockSize;
-                                lastDayTaught[s.id] = dayIdx;
+                                teacherDayLoad[teacherKey] = currentLoad + blockSize;
                                 placed = true;
                                 break;
                             }
@@ -372,11 +433,11 @@
                     else cellClasses += "empty-slot";
 
                     rowHtml += `
-                        <div class="${cellClasses}" onclick="toggleCellState(${dayIdx}, ${slotIdx})">
+                        <div class="${cellClasses}">
                             ${data ? `
                                 <div class="text-[10px] font-black uppercase tracking-tighter leading-none mb-1">${data.name}</div>
                                 <div class="text-[9px] font-medium text-slate-500 truncate w-full px-1">${data.teacher}</div>
-                                <div class="mt-1 bg-white/50 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">${data.type}</div>
+                                <div class="mt-1 bg-white/40 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">${data.type}</div>
                             ` : (isClosed ? '<span class="text-[8px] font-black opacity-30">YOPIQ</span>' : '')}
                         </div>
                     `;
@@ -386,43 +447,29 @@
             }
         }
 
-        function toggleCellState(day, slot) {
-            const el = event.currentTarget;
-            if (el.classList.contains('closed-day')) return;
-            el.classList.toggle('conflict');
-        }
-
         async function exportToPDF() {
             const { jsPDF } = window.jspdf;
             const header = document.getElementById('pdfHeader');
             const footer = document.getElementById('pdfFooter');
-            const currentDate = document.getElementById('currentDate');
-            const teacherList = document.getElementById('teacherListFooter');
-
-            currentDate.innerText = new Date().toLocaleDateString('uz-UZ');
+            
+            document.getElementById('currentDate').innerText = new Date().toLocaleDateString('uz-UZ');
             header.classList.remove('hidden');
             footer.classList.remove('hidden');
             
-            teacherList.innerHTML = Array.from(appData.teachers).map(t => `<li>• ${t}</li>`).join('');
+            const usedTeachers = new Set();
+            Object.values(appData.schedule).forEach(s => usedTeachers.add(s.teacher));
+            document.getElementById('teacherListFooter').innerHTML = Array.from(usedTeachers).map(t => `<li>• ${t}</li>`).join('');
 
             const element = document.getElementById('printableArea');
             
             try {
-                const canvas = await html2canvas(element, { 
-                    scale: 2,
-                    useCORS: true,
-                    backgroundColor: '#ffffff'
-                });
-                
+                const canvas = await html2canvas(element, { scale: 2, useCORS: true });
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`Jadval_${document.getElementById('activeGroupDisplay').innerText}.pdf`);
-            } catch (err) {
-                console.error("PDF generation error:", err);
+                pdf.save(`Jadval_${document.getElementById('activeGroupDisplay').innerText}_S${document.getElementById('activeSemesterFilter').value}.pdf`);
             } finally {
                 header.classList.add('hidden');
                 footer.classList.add('hidden');
@@ -430,6 +477,7 @@
         }
 
         // Init
+        updateDropdowns();
         initDaySettings();
         renderSchedule();
     </script>
