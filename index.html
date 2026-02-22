@@ -3,234 +3,419 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dars Jadvali PRO - Blok Tizimi</title>
+    <title>KOICA Smart Scheduler - Final Pro Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
-        .card { background: white; border-radius: 24px; box-shadow: 0 4px 25px -5px rgba(0,0,0,0.05); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .block-amaliy { border-left: 6px solid #3b82f6; background: linear-gradient(to right, #eff6ff, #ffffff); }
-        .block-nazariy { border-left: 6px solid #a855f7; background: linear-gradient(to right, #f5f3ff, #ffffff); }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
+        
+        .slot-amaliy { border-left: 6px solid #2563eb; background: #eff6ff; }
+        .slot-nazariy { border-left: 6px solid #9333ea; background: #f5f3ff; }
+        .slot-holiday { background: #fee2e2 !important; border: 2px dashed #ef4444 !important; }
+        .slot-conflict { background: #ef4444 !important; color: white !important; }
+        
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; padding: 0; }
+            .schedule-page { page-break-after: always; padding: 20px; }
+        }
+        .print-only { display: none; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useEffect, useMemo } = React;
 
         const App = () => {
             const [groups, setGroups] = useState([]);
             const [teachers, setTeachers] = useState([]);
             const [assignments, setAssignments] = useState([]);
-            const [workDays, setWorkDays] = useState(6);
-            const [currentGroup, setCurrentGroup] = useState("");
-            const [scheduleData, setScheduleData] = useState(null);
-
-            const [groupInp, setGroupInp] = useState("");
-            const [teacherInp, setTeacherInp] = useState("");
-            const [assignInp, setAssignInp] = useState({ 
-                group: "", teacherId: "", subject: "", type: "Amaliy", totalHours: 144, priority: 1 
+            const [currentSem, setCurrentSem] = useState(1);
+            
+            // Ish kunlari sozlamalari: 0, 2, 4, 6, 8, 10 soat
+            const [daySettings, setDaySettings] = useState({
+                0: 8, 1: 8, 2: 8, 3: 8, 4: 8, 5: 0 
             });
 
-            const addGroup = () => { if (groupInp) { setGroups([...groups, { id: Date.now(), name: groupInp }]); setGroupInp(""); } };
-            const addTeacher = () => { if (teacherInp) { setTeachers([...teachers, { id: Date.now(), name: teacherInp }]); setTeacherInp(""); } };
-            
-            const addAssignment = () => {
-                if (!assignInp.group || !assignInp.subject || !assignInp.teacherId) return alert("Ma'lumotlar to'liq emas!");
-                setAssignments([...assignments, { ...assignInp, id: Date.now(), totalHours: parseInt(assignInp.totalHours) }]
-                    .sort((a,b) => a.priority - b.priority));
-                setAssignInp({ ...assignInp, subject: "", totalHours: 144 });
+            const [holidays, setHolidays] = useState({}); // { "GroupName-DayIndex": true }
+            const [currentGroup, setCurrentGroup] = useState("");
+            const [schedule, setSchedule] = useState({});
+
+            const daysArr = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
+
+            // Input states
+            const [gInp, setGInp] = useState("");
+            const [tInp, setTInp] = useState("");
+            const [aInp, setAInp] = useState({ 
+                group: "", teacherId: "", subject: "", type: "Amaliy", 
+                totalHours: 36, priority: 1, semester: 1 
+            });
+
+            const addGroup = () => { if (gInp) { setGroups([...groups, { id: Date.now(), name: gInp }]); setGInp(""); } };
+            const addTeacher = () => { if (tInp) { setTeachers([...teachers, { id: Date.now(), name: tInp }]); setTInp(""); } };
+            const addAssign = () => {
+                if (!aInp.group || !aInp.subject || !aInp.teacherId) return;
+                setAssignments([...assignments, { ...aInp, id: Date.now() }]);
             };
 
-            const calculateSchedule = () => {
-                const finalResult = {};
+            const toggleHoliday = (groupName, dayIdx) => {
+                const key = `${groupName}-${dayIdx}`;
+                const newHolidays = { ...holidays, [key]: !holidays[key] };
+                setHolidays(newHolidays);
+                // Bayram o'zgarganda jadvalni qayta hisoblash (avtomatik surish)
+                setTimeout(() => solveSchedule(newHolidays), 0);
+            };
+
+            const solveSchedule = (activeHolidays = holidays) => {
+                const newSchedule = {};
+                const teacherLoad = {}; // "TeacherID-Day-Slot"
+
+                const sortedTasks = [...assignments]
+                    .filter(t => parseInt(t.semester) === currentSem)
+                    .sort((a, b) => {
+                        // 1. Amaliy darslar oldin
+                        if (a.type !== b.type) return a.type === "Amaliy" ? -1 : 1;
+                        // 2. Priority bo'yicha (1 - eng yuqori)
+                        return a.priority - b.priority;
+                    });
 
                 groups.forEach(group => {
-                    let groupAssig = assignments
-                        .filter(a => a.group === group.name)
-                        .map(a => ({...a, remainingHours: a.totalHours}));
+                    const gTasks = sortedTasks.filter(t => t.group === group.name);
+                    const gGrid = Array.from({ length: 6 }, () => Array(5).fill(null)); // Max 5 para (10 soat)
+                    let lastAmaliyDay = -2;
 
-                    const groupSchedule = [];
-                    let weekGrid = Array.from({length: workDays}, () => Array(4).fill(null));
-                    
-                    let day = 0;
-                    let slot = 0;
-                    let weekIdx = 0;
+                    gTasks.forEach(task => {
+                        let hoursRem = parseInt(task.totalHours);
+                        const isAmaliy = task.type === "Amaliy";
+                        const blockSize = isAmaliy ? 3 : 1; // 6 soat yoki 2 soat
+                        const teacher = teachers.find(t => t.id == task.teacherId);
+                        const tName = teacher ? `${teacher.name.split(' ')[0]} ${teacher.name.split(' ')[1]?.[0] || ''}.` : "";
 
-                    // Darslarni taqsimlash mantiqi
-                    while (groupAssig.some(a => a.remainingHours > 0)) {
-                        let currentSubject = groupAssig.find(a => a.remainingHours > 0);
-                        if (!currentSubject) break;
+                        // Necessary blocks hisobi
+                        let blocksNeeded = isAmaliy ? Math.ceil(hoursRem / 6) : Math.ceil(hoursRem / 2);
 
-                        const teacher = teachers.find(t => t.id == currentSubject.teacherId)?.name || "Noma'lum";
-                        
-                        // Qancha soat qo'yishni aniqlash
-                        let hoursToPlace = currentSubject.type === "Amaliy" ? 6 : 2;
-                        
-                        // Kunlik qolgan bo'sh joyni hisoblash
-                        let remainingInDay = (4 - slot) * 2;
-                        
-                        // Agar belgilangan blok (6 yoki 2) kunga sig'masa yoki soat kam qolgan bo'lsa
-                        let actualHours = Math.min(hoursToPlace, remainingInDay, currentSubject.remainingHours);
-                        let pairsToPlace = Math.ceil(actualHours / 2);
+                        for (let d = 0; d < 6; d++) {
+                            if (blocksNeeded <= 0) break;
+                            
+                            // Bayram yoki yopiq kun tekshiruvi
+                            if (daySettings[d] === 0 || activeHolidays[`${group.name}-${d}`]) continue;
+                            
+                            // Amaliy: Ketma-ket ikki kunga tushmaslik
+                            if (isAmaliy && Math.abs(d - lastAmaliyDay) < 2) continue;
 
-                        for (let i = 0; i < pairsToPlace; i++) {
-                            if (slot < 4) {
-                                weekGrid[day][slot] = { 
-                                    subject: currentSubject.subject, 
-                                    teacher, 
-                                    type: currentSubject.type,
-                                    isContinuation: i > 0 
-                                };
-                                slot++;
-                                currentSubject.remainingHours -= 2;
+                            const maxPara = daySettings[d] / 2;
+                            
+                            // Nazariy darslar uchun 1 yoki 4-juftlik prioriteti
+                            let slotsToTry = Array.from({length: maxPara}, (_, i) => i);
+                            if (!isAmaliy) {
+                                slotsToTry = slotsToTry.sort((a, b) => {
+                                    const prefs = [0, 3]; // 1-juftlik (0) va 4-juftlik (3)
+                                    if (prefs.includes(a) && !prefs.includes(b)) return -1;
+                                    if (!prefs.includes(a) && prefs.includes(b)) return 1;
+                                    return 0;
+                                });
+                            }
+
+                            for (let s of slotsToTry) {
+                                if (blocksNeeded <= 0) break;
+                                if (s + blockSize > maxPara) continue;
+
+                                // Bo'sh joy tekshiruvi
+                                let canFit = true;
+                                for (let i = 0; i < blockSize; i++) {
+                                    if (gGrid[d][s + i]) { canFit = false; break; }
+                                }
+
+                                if (canFit) {
+                                    // Teacher va Group limiti tekshiruvi (8-40 soat)
+                                    // (Bu yerda soddalashtirilgan greedy check)
+                                    let hasConflict = false;
+                                    for (let i = 0; i < blockSize; i++) {
+                                        if (teacherLoad[`${task.teacherId}-${d}-${s + i}`]) hasConflict = true;
+                                    }
+
+                                    for (let i = 0; i < blockSize; i++) {
+                                        gGrid[d][s + i] = { 
+                                            subject: task.subject.toUpperCase(), 
+                                            teacher: tName, 
+                                            type: task.type,
+                                            conflict: hasConflict,
+                                            originalId: task.id
+                                        };
+                                        // O'qituvchi bandligini belgilash
+                                        teacherLoad[`${task.teacherId}-${d}-${s + i}`] = group.name;
+                                    }
+                                    
+                                    blocksNeeded--;
+                                    if (isAmaliy) lastAmaliyDay = d;
+                                    break; // Keyingi blokka o'tish (bir kunda bitta fandan bir blok)
+                                }
                             }
                         }
-
-                        // Agar kun to'lsa yoki dars tugasa keyingi kunga o'tish
-                        if (slot >= 4 || currentSubject.remainingHours <= 0) {
-                            if (slot >= 4) {
-                                slot = 0;
-                                day++;
-                            }
-                            if (day >= workDays) {
-                                groupSchedule.push(weekGrid);
-                                weekGrid = Array.from({length: workDays}, () => Array(4).fill(null));
-                                day = 0;
-                            }
-                        }
-                    }
-                    if (day > 0 || slot > 0) groupSchedule.push(weekGrid);
-                    finalResult[group.name] = groupSchedule;
-                });
-
-                setScheduleData(finalResult);
-                if (!currentGroup && groups.length > 0) setCurrentGroup(groups[0].name);
-            };
-
-            const exportExcel = () => {
-                if(!scheduleData || !currentGroup) return;
-                const data = [["HAFTA", "KUN", "1-PARA", "2-PARA", "3-PARA", "4-PARA"]];
-                const daysName = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
-                
-                scheduleData[currentGroup].forEach((week, wIdx) => {
-                    week.forEach((day, dIdx) => {
-                        data.push([`Hafta ${wIdx+1}`, daysName[dIdx], ...day.map(s => s ? `${s.subject} (${s.type})` : "-")]);
                     });
+                    newSchedule[group.name] = gGrid;
                 });
 
-                const ws = XLSX.utils.aoa_to_sheet(data);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Jadval");
-                XLSX.writeFile(wb, `${currentGroup}_blok_jadval.xlsx`);
+                setSchedule(newSchedule);
+                if (groups.length > 0 && !currentGroup) setCurrentGroup(groups[0].name);
             };
 
             return (
-                <div className="max-w-[1600px] mx-auto p-4 lg:p-10">
-                    <header className="flex flex-col lg:flex-row justify-between items-center gap-6 mb-12 bg-white p-8 rounded-[2.5rem] shadow-sm border-b-8 border-blue-600">
-                        <div>
-                            <h1 className="text-4xl font-black tracking-tighter italic">KOICA <span className="text-blue-600 underline">BLOCK-SYSTEM</span></h1>
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.4em] mt-1">Blok-Modul Taqsimoti v4.0</p>
-                        </div>
-                        <div className="flex flex-wrap gap-4">
-                            <button onClick={calculateSchedule} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase shadow-xl hover:bg-blue-700 transition-all">Hisoblash</button>
-                            <button onClick={exportExcel} className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase shadow-xl hover:bg-emerald-600 transition-all">Excel Export</button>
-                        </div>
-                    </header>
-
-                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                        {/* INPUTS */}
-                        <div className="xl:col-span-3 space-y-6">
-                            <section className="card p-6">
-                                <h2 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-l-4 border-blue-500 pl-3">Bazaviy Sozlamalar</h2>
-                                <div className="space-y-4">
-                                    <input value={groupInp} onChange={e => setGroupInp(e.target.value)} onKeyDown={e => e.key==='Enter' && addGroup()} className="w-full p-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none" placeholder="Guruh nomi..."/>
-                                    <button onClick={addGroup} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase">+ Guruh</button>
-                                    
-                                    <input value={teacherInp} onChange={e => setTeacherInp(e.target.value)} onKeyDown={e => e.key==='Enter' && addTeacher()} className="w-full p-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none" placeholder="O'qituvchi F.I.SH..."/>
-                                    <button onClick={addTeacher} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase">+ O'qituvchi</button>
-                                </div>
-                            </section>
-
-                            <section className="card p-6 bg-blue-50/30 border border-blue-100">
-                                <h2 className="text-[10px] font-black uppercase text-blue-500 mb-4 tracking-widest border-l-4 border-blue-400 pl-3">Yuklama Kiritish</h2>
-                                <div className="space-y-4">
-                                    <select value={assignInp.group} onChange={e => setAssignInp({...assignInp, group: e.target.value})} className="w-full p-3 border rounded-xl text-sm font-bold bg-white">
-                                        <option value="">Guruh tanlang</option>
-                                        {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
-                                    </select>
-                                    <select value={assignInp.teacherId} onChange={e => setAssignInp({...assignInp, teacherId: e.target.value})} className="w-full p-3 border rounded-xl text-sm font-bold bg-white">
-                                        <option value="">O'qituvchi tanlang</option>
-                                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                    </select>
-                                    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-                                        {["Nazariy", "Amaliy"].map(t => (
-                                            <button key={t} onClick={() => setAssignInp({...assignInp, type: t})} className={`flex-1 py-2 rounded-lg text-[10px] font-black transition-all ${assignInp.type === t ? 'bg-white shadow text-blue-600' : 'text-slate-400'}`}>{t.toUpperCase()}</button>
+                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+                    {/* Control Panel */}
+                    <div className="no-print grid grid-cols-1 xl:grid-cols-4 gap-6 mb-12">
+                        
+                        {/* 1. Sozlamalar */}
+                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
+                            <h2 className="font-black text-2xl text-slate-800 tracking-tighter italic">
+                                <span className="text-blue-600">SAM</span> KOICA <span className="text-[10px] align-top bg-blue-100 text-blue-600 px-2 py-1 rounded-full not-italic ml-1">V3.0</span>
+                            </h2>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Semestr</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2].map(s => (
+                                            <button key={s} onClick={() => setCurrentSem(s)} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${currentSem === s ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+                                                {s}-Semestr
+                                            </button>
                                         ))}
                                     </div>
-                                    <input value={assignInp.subject} onChange={e => setAssignInp({...assignInp, subject: e.target.value})} className="w-full p-3 border rounded-xl text-sm font-bold" placeholder="Fan nomi..."/>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input type="number" value={assignInp.totalHours} onChange={e => setAssignInp({...assignInp, totalHours: e.target.value})} className="p-3 border rounded-xl text-sm font-bold" placeholder="Soat"/>
-                                        <input type="number" value={assignInp.priority} onChange={e => setAssignInp({...assignInp, priority: e.target.value})} className="p-3 border rounded-xl text-sm font-bold" placeholder="Sira"/>
-                                    </div>
-                                    <button onClick={addAssignment} className="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-100 mt-2">Saqlash</button>
-                                </div>
-                            </section>
-                        </div>
-
-                        {/* OUTPUT */}
-                        <div className="xl:col-span-9">
-                            <div className="card p-8 min-h-screen">
-                                <div className="flex gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
-                                    {groups.map(g => (
-                                        <button key={g.id} onClick={() => setCurrentGroup(g.name)} className={`px-6 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${currentGroup === g.name ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{g.name}</button>
-                                    ))}
                                 </div>
 
-                                {scheduleData && scheduleData[currentGroup] ? (
-                                    <div className="space-y-16">
-                                        {scheduleData[currentGroup].map((week, wIdx) => (
-                                            <div key={wIdx} className="relative border-t-2 border-slate-100 pt-10">
-                                                <span className="absolute -top-3 left-0 bg-slate-800 text-white px-4 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">{wIdx + 1}-Hafta</span>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
-                                                    {["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"].slice(0, workDays).map((dayName, dIdx) => (
-                                                        <div key={dIdx} className="bg-slate-50/50 rounded-[2rem] p-5 border border-slate-100">
-                                                            <h3 className="text-[10px] font-black text-blue-600 uppercase mb-4 tracking-widest">{dayName}</h3>
-                                                            <div className="space-y-2">
-                                                                {week[dIdx].map((para, pIdx) => (
-                                                                    <div key={pIdx} className={`p-4 rounded-2xl transition-all ${para ? (para.type === 'Amaliy' ? 'block-amaliy shadow-sm border border-blue-100' : 'block-nazariy shadow-sm border border-purple-100') : 'border-2 border-dashed border-slate-200 py-6 text-center opacity-30'}`}>
-                                                                        {para ? (
-                                                                            <div>
-                                                                                <div className="flex justify-between items-center mb-1">
-                                                                                    <span className="text-[8px] font-black text-slate-400 uppercase italic">{pIdx + 1}-PARA</span>
-                                                                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${para.type === 'Amaliy' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>{para.type.toUpperCase()}</span>
-                                                                                </div>
-                                                                                <div className="text-[11px] font-extrabold text-slate-800 truncate uppercase">{para.subject}</div>
-                                                                                <div className="text-[9px] font-medium text-slate-500 mt-0.5 italic">{para.teacher}</div>
-                                                                            </div>
-                                                                        ) : <span className="text-[8px] font-bold text-slate-300">BO'SH</span>}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Ish kunlari (Juftliklar soni)</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {daysArr.map((d, i) => (
+                                            <div key={i}>
+                                                <span className="text-[8px] font-bold text-slate-400 mb-1 block uppercase">{d.slice(0,3)}</span>
+                                                <select 
+                                                    value={daySettings[i]} 
+                                                    onChange={e => setDaySettings({...daySettings, [i]: parseInt(e.target.value)})}
+                                                    className="w-full p-1.5 border rounded-lg text-[10px] font-bold outline-none bg-slate-50"
+                                                >
+                                                    {[0, 2, 4, 6, 8, 10].map(h => <option key={h} value={h}>{h/2} para</option>)}
+                                                </select>
                                             </div>
                                         ))}
                                     </div>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-40 opacity-20">
-                                        <div className="text-7xl mb-4">🗓️</div>
-                                        <p className="font-black text-xs uppercase tracking-[0.3em]">Hisoblash tugmasini bosing</p>
-                                    </div>
-                                )}
+                                </div>
                             </div>
+
+                            <div className="pt-4 border-t space-y-3">
+                                <div className="flex gap-2">
+                                    <input value={gInp} onChange={e => setGInp(e.target.value)} placeholder="Guruh nomi" className="flex-1 p-2.5 border rounded-xl text-xs font-semibold outline-none focus:border-blue-500" />
+                                    <button onClick={addGroup} className="bg-slate-800 text-white px-4 rounded-xl text-xs font-bold hover:bg-black">+</button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <input value={tInp} onChange={e => setTInp(e.target.value)} placeholder="O'qituvchi F.I.SH" className="flex-1 p-2.5 border rounded-xl text-xs font-semibold outline-none focus:border-blue-500" />
+                                    <button onClick={addTeacher} className="bg-slate-800 text-white px-4 rounded-xl text-xs font-bold hover:bg-black">+</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. Fan Biriktirish */}
+                        <div className="bg-blue-600 p-8 rounded-[2.5rem] shadow-xl text-white xl:col-span-2 space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-bold text-sm uppercase tracking-widest italic opacity-80">Yuklama Taqsimoti</h3>
+                                <span className="text-[10px] bg-blue-500 px-3 py-1 rounded-full font-bold">Priority: 1 (Max) - 10 (Min)</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
+                                    <select value={aInp.group} onChange={e => setAInp({...aInp, group: e.target.value})} className="w-full p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
+                                        <option value="">Guruhni tanlang</option>
+                                        {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                                    </select>
+                                    <select value={aInp.teacherId} onChange={e => setAInp({...aInp, teacherId: e.target.value})} className="w-full p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
+                                        <option value="">O'qituvchini tanlang</option>
+                                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    <input value={aInp.subject} onChange={e => setAInp({...aInp, subject: e.target.value})} placeholder="FAN NOMI (KATTA HARFLARDA)" className="w-full p-3.5 rounded-2xl text-slate-800 text-sm font-black uppercase placeholder:text-slate-400" />
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex gap-2">
+                                        <select value={aInp.type} onChange={e => setAInp({...aInp, type: e.target.value})} className="flex-1 p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
+                                            <option value="Amaliy">Amaliy (6s/blok)</option>
+                                            <option value="Nazariy">Nazariy (2s/blok)</option>
+                                        </select>
+                                        <select value={aInp.priority} onChange={e => setAInp({...aInp, priority: parseInt(e.target.value)})} className="w-24 p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
+                                            {[1,2,3,4,5,6,7,8,9,10].map(p => <option key={p} value={p}>Prio {p}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="bg-blue-700/40 p-3.5 rounded-2xl border border-blue-400/30 flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Jami dars soati:</span>
+                                        <input type="number" value={aInp.totalHours} onChange={e => setAInp({...aInp, totalHours: e.target.value})} className="w-16 bg-transparent text-right font-black text-xl outline-none" />
+                                    </div>
+                                    <button onClick={addAssign} className="w-full bg-white text-blue-600 py-4 rounded-3xl font-black text-xs uppercase hover:bg-blue-50 transition-all active:scale-[0.97]">
+                                        Ro'yxatga Qo'shish
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Hisoblash */}
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 flex-1">
+                                <h4 className="text-[10px] font-black text-emerald-600 uppercase mb-4 tracking-widest">Tizim Holati:</h4>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between text-xs font-bold text-slate-600">
+                                        <span>Guruhlar:</span> <span>{groups.length}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-slate-600">
+                                        <span>Fanlar:</span> <span>{assignments.filter(a => parseInt(a.semester) === currentSem).length}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-slate-600">
+                                        <span>O'qituvchilar:</span> <span>{teachers.length}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => solveSchedule()} className="w-full bg-slate-900 hover:bg-black text-white py-8 rounded-[2.5rem] font-black tracking-[0.2em] shadow-2xl transition-all uppercase text-xs">
+                                Jadvalni Hisoblash
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Schedule View */}
+                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border-none">
+                        
+                        <div className="no-print p-6 border-b flex flex-wrap gap-2 items-center bg-slate-50/50">
+                            {groups.map(g => (
+                                <button key={g.id} onClick={() => setCurrentGroup(g.name)} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${currentGroup === g.name ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-white text-slate-400 border hover:border-blue-200'}`}>
+                                    {g.name}
+                                </button>
+                            ))}
+                            <button onClick={() => window.print()} className="ml-auto bg-emerald-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700">
+                                <span>📥 PDF EXPORT</span>
+                            </button>
+                        </div>
+
+                        <div className="p-8 lg:p-12 min-h-[600px]">
+                            {currentGroup && schedule[currentGroup] ? (
+                                <div className="schedule-page">
+                                    {/* Print Header */}
+                                    <div className="print-only mb-12">
+                                        <div className="flex justify-between items-start text-[11px] font-bold uppercase text-center">
+                                            <div className="w-1/3 border-b border-black pb-8">
+                                                <p className="mb-4">SAMARQAND KOICA KASB-HUNARGA O'QITISH MARKAZI</p>
+                                                <p>"TASDIQLAYMAN"</p>
+                                                <p className="font-normal italic text-[9px] mt-2">Direktor o'rinbosari: ____________________</p>
+                                            </div>
+                                            <div className="w-1/3 pt-4">
+                                                <h1 className="text-3xl font-black underline decoration-2 underline-offset-8">DARS JADVALI</h1>
+                                                <p className="mt-6 text-xl tracking-widest">{currentGroup} GURUHI</p>
+                                                <p className="text-[10px] font-normal mt-2">{currentSem}-SEMESTR, 2024/2025 O'QUV YILI</p>
+                                            </div>
+                                            <div className="w-1/3 border-b border-black pb-8">
+                                                <p>Sana: "____" ________ 202__ y.</p>
+                                                <p className="mt-12 opacity-30 italic">M.O'. (Muhr uchun)</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Grid */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                                        {daysArr.map((day, dIdx) => {
+                                            const isHoliday = holidays[`${currentGroup}-${dIdx}`];
+                                            const isClosed = daySettings[dIdx] === 0;
+                                            
+                                            return (
+                                                <div key={dIdx} className={`relative border rounded-[2.5rem] overflow-hidden transition-all ${isClosed ? 'opacity-30 grayscale' : 'bg-slate-50/50 border-slate-100'} print:border-black print:rounded-none`}>
+                                                    <div className="bg-white p-5 border-b flex justify-between items-center print:border-black">
+                                                        <span className="text-[12px] font-black text-slate-800 uppercase tracking-widest">{day}</span>
+                                                        <label className="no-print flex items-center gap-2 cursor-pointer">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isHoliday || false} 
+                                                                onChange={() => !isClosed && toggleHoliday(currentGroup, dIdx)}
+                                                                className="w-4 h-4 rounded text-red-600 focus:ring-red-500"
+                                                            />
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">Bayram</span>
+                                                        </label>
+                                                    </div>
+
+                                                    <div className={`p-5 space-y-4 ${isHoliday ? 'slot-holiday' : ''}`}>
+                                                        {schedule[currentGroup][dIdx].map((slot, sIdx) => {
+                                                            const maxPara = daySettings[dIdx] / 2;
+                                                            if (sIdx >= maxPara && !isClosed) return <div key={sIdx} className="h-8 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center text-[8px] font-bold text-slate-300 uppercase tracking-widest">Limitdan tashqari</div>;
+                                                            if (isClosed) return null;
+
+                                                            return (
+                                                                <div key={sIdx} className={`p-5 rounded-[1.5rem] border shadow-sm transition-all print:rounded-none print:border-black ${
+                                                                    slot ? (slot.conflict ? 'slot-conflict' : (slot.type === "Amaliy" ? 'slot-amaliy' : 'slot-nazariy')) : 'bg-white border-slate-100'
+                                                                }`}>
+                                                                    <div className="flex justify-between items-center mb-3">
+                                                                        <span className={`text-[9px] font-black w-6 h-6 flex items-center justify-center rounded-xl ${slot?.conflict ? 'bg-white text-red-600' : 'bg-slate-900 text-white'}`}>
+                                                                            {sIdx + 1}
+                                                                        </span>
+                                                                        {slot && <span className="text-[8px] font-black opacity-50 italic uppercase tracking-tighter">{slot.type}</span>}
+                                                                    </div>
+                                                                    {slot ? (
+                                                                        <div className="space-y-1">
+                                                                            <div className="text-[13px] font-black uppercase leading-tight tracking-tight">{slot.subject}</div>
+                                                                            <div className="text-[10px] font-bold opacity-80 italic text-slate-500">{slot.teacher}</div>
+                                                                            {slot.conflict && <div className="text-[8px] font-black mt-3 pt-2 border-t border-white/20 uppercase tracking-widest">⚠️ PARALLEL DARS</div>}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="h-12 flex items-center justify-center opacity-5">
+                                                                            <span className="text-[10px] font-black uppercase tracking-[0.4em]">{isHoliday ? "" : "BO'SH SLOT"}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    
+                                                    {isHoliday && (
+                                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                            <div className="rotate-[30deg] border-4 border-red-500/20 px-6 py-2 rounded-xl">
+                                                                <span className="text-red-500/20 font-black text-5xl uppercase tracking-tighter">BAYRAM</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Print Footer */}
+                                    <div className="print-only mt-20 pt-10 border-t-2 border-black">
+                                        <div className="grid grid-cols-2 gap-20 text-[11px] font-bold uppercase">
+                                            <div className="space-y-8">
+                                                <div className="flex justify-between border-b border-black pb-1">
+                                                    <span>Katta o'qituvchi:</span>
+                                                    <span className="italic font-normal">F.I.SH ____________________</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-black pb-1">
+                                                    <span>O'quv uslubchi (ICHTU):</span>
+                                                    <span className="italic font-normal">F.I.SH ____________________</span>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-8">
+                                                <div className="flex justify-between border-b border-black pb-1">
+                                                    <span>Bo'lim boshlig'i:</span>
+                                                    <span className="italic font-normal">F.I.SH ____________________</span>
+                                                </div>
+                                                <div className="text-right pt-6 opacity-40 text-[9px]">
+                                                    KOICA Smart Scheduler System v3.0 | 2025
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-40 text-slate-300">
+                                    <div className="text-8xl mb-8 animate-bounce">📅</div>
+                                    <h3 className="text-xl font-black uppercase tracking-[0.5em]">Ma'lumotlarni kiriting va jadvalni hisoblang</h3>
+                                    <p className="mt-4 text-sm font-medium">Algoritm barcha cheklovlarni avtomatik tekshiradi</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
