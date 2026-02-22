@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KOICA Smart Scheduler - Final Pro Edition</title>
+    <title>KOICA Smart Scheduler - Xujamatov R. Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -24,6 +24,11 @@
             .schedule-page { page-break-after: always; padding: 20px; }
         }
         .print-only { display: none; }
+
+        .author-badge {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -38,18 +43,16 @@
             const [assignments, setAssignments] = useState([]);
             const [currentSem, setCurrentSem] = useState(1);
             
-            // Ish kunlari sozlamalari: 0, 2, 4, 6, 8, 10 soat
             const [daySettings, setDaySettings] = useState({
                 0: 8, 1: 8, 2: 8, 3: 8, 4: 8, 5: 0 
             });
 
-            const [holidays, setHolidays] = useState({}); // { "GroupName-DayIndex": true }
+            const [holidays, setHolidays] = useState({});
             const [currentGroup, setCurrentGroup] = useState("");
             const [schedule, setSchedule] = useState({});
 
             const daysArr = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
 
-            // Input states
             const [gInp, setGInp] = useState("");
             const [tInp, setTInp] = useState("");
             const [aInp, setAInp] = useState({ 
@@ -68,54 +71,45 @@
                 const key = `${groupName}-${dayIdx}`;
                 const newHolidays = { ...holidays, [key]: !holidays[key] };
                 setHolidays(newHolidays);
-                // Bayram o'zgarganda jadvalni qayta hisoblash (avtomatik surish)
                 setTimeout(() => solveSchedule(newHolidays), 0);
             };
 
             const solveSchedule = (activeHolidays = holidays) => {
                 const newSchedule = {};
-                const teacherLoad = {}; // "TeacherID-Day-Slot"
+                const teacherLoad = {};
 
                 const sortedTasks = [...assignments]
-                    .filter(t => parseInt(t.semester) === currentSem)
+                    .filter(t => parseInt(t.semester) === currentSem) // Faqat tanlangan semestr fanlari
                     .sort((a, b) => {
-                        // 1. Amaliy darslar oldin
                         if (a.type !== b.type) return a.type === "Amaliy" ? -1 : 1;
-                        // 2. Priority bo'yicha (1 - eng yuqori)
                         return a.priority - b.priority;
                     });
 
                 groups.forEach(group => {
                     const gTasks = sortedTasks.filter(t => t.group === group.name);
-                    const gGrid = Array.from({ length: 6 }, () => Array(5).fill(null)); // Max 5 para (10 soat)
+                    const gGrid = Array.from({ length: 6 }, () => Array(5).fill(null));
                     let lastAmaliyDay = -2;
 
                     gTasks.forEach(task => {
                         let hoursRem = parseInt(task.totalHours);
                         const isAmaliy = task.type === "Amaliy";
-                        const blockSize = isAmaliy ? 3 : 1; // 6 soat yoki 2 soat
+                        const blockSize = isAmaliy ? 3 : 1;
                         const teacher = teachers.find(t => t.id == task.teacherId);
                         const tName = teacher ? `${teacher.name.split(' ')[0]} ${teacher.name.split(' ')[1]?.[0] || ''}.` : "";
 
-                        // Necessary blocks hisobi
                         let blocksNeeded = isAmaliy ? Math.ceil(hoursRem / 6) : Math.ceil(hoursRem / 2);
 
                         for (let d = 0; d < 6; d++) {
                             if (blocksNeeded <= 0) break;
-                            
-                            // Bayram yoki yopiq kun tekshiruvi
                             if (daySettings[d] === 0 || activeHolidays[`${group.name}-${d}`]) continue;
-                            
-                            // Amaliy: Ketma-ket ikki kunga tushmaslik
                             if (isAmaliy && Math.abs(d - lastAmaliyDay) < 2) continue;
 
                             const maxPara = daySettings[d] / 2;
-                            
-                            // Nazariy darslar uchun 1 yoki 4-juftlik prioriteti
                             let slotsToTry = Array.from({length: maxPara}, (_, i) => i);
+                            
                             if (!isAmaliy) {
                                 slotsToTry = slotsToTry.sort((a, b) => {
-                                    const prefs = [0, 3]; // 1-juftlik (0) va 4-juftlik (3)
+                                    const prefs = [0, 3];
                                     if (prefs.includes(a) && !prefs.includes(b)) return -1;
                                     if (!prefs.includes(a) && prefs.includes(b)) return 1;
                                     return 0;
@@ -126,15 +120,12 @@
                                 if (blocksNeeded <= 0) break;
                                 if (s + blockSize > maxPara) continue;
 
-                                // Bo'sh joy tekshiruvi
                                 let canFit = true;
                                 for (let i = 0; i < blockSize; i++) {
                                     if (gGrid[d][s + i]) { canFit = false; break; }
                                 }
 
                                 if (canFit) {
-                                    // Teacher va Group limiti tekshiruvi (8-40 soat)
-                                    // (Bu yerda soddalashtirilgan greedy check)
                                     let hasConflict = false;
                                     for (let i = 0; i < blockSize; i++) {
                                         if (teacherLoad[`${task.teacherId}-${d}-${s + i}`]) hasConflict = true;
@@ -148,13 +139,12 @@
                                             conflict: hasConflict,
                                             originalId: task.id
                                         };
-                                        // O'qituvchi bandligini belgilash
                                         teacherLoad[`${task.teacherId}-${d}-${s + i}`] = group.name;
                                     }
                                     
                                     blocksNeeded--;
                                     if (isAmaliy) lastAmaliyDay = d;
-                                    break; // Keyingi blokka o'tish (bir kunda bitta fandan bir blok)
+                                    break;
                                 }
                             }
                         }
@@ -167,19 +157,18 @@
             };
 
             return (
-                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+                <div className="p-4 md:p-8 max-w-[1600px] mx-auto min-h-screen flex flex-col">
                     {/* Control Panel */}
                     <div className="no-print grid grid-cols-1 xl:grid-cols-4 gap-6 mb-12">
                         
-                        {/* 1. Sozlamalar */}
                         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
                             <h2 className="font-black text-2xl text-slate-800 tracking-tighter italic">
-                                <span className="text-blue-600">SAM</span> KOICA <span className="text-[10px] align-top bg-blue-100 text-blue-600 px-2 py-1 rounded-full not-italic ml-1">V3.0</span>
+                                <span className="text-blue-600">SAM</span> KOICA <span className="text-[10px] align-top bg-blue-100 text-blue-600 px-2 py-1 rounded-full not-italic ml-1">V3.1</span>
                             </h2>
                             
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Semestr</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Aktiv Semestr (Jadval uchun)</label>
                                     <div className="flex gap-2">
                                         {[1, 2].map(s => (
                                             <button key={s} onClick={() => setCurrentSem(s)} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${currentSem === s ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
@@ -190,7 +179,7 @@
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Ish kunlari (Juftliklar soni)</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Ish kunlari</label>
                                     <div className="grid grid-cols-3 gap-2">
                                         {daysArr.map((d, i) => (
                                             <div key={i}>
@@ -220,11 +209,9 @@
                             </div>
                         </div>
 
-                        {/* 2. Fan Biriktirish */}
                         <div className="bg-blue-600 p-8 rounded-[2.5rem] shadow-xl text-white xl:col-span-2 space-y-6">
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-sm uppercase tracking-widest italic opacity-80">Yuklama Taqsimoti</h3>
-                                <span className="text-[10px] bg-blue-500 px-3 py-1 rounded-full font-bold">Priority: 1 (Max) - 10 (Min)</span>
+                                <h3 className="font-bold text-sm uppercase tracking-widest italic opacity-80">Fan Biriktirish (Semestr bilan)</h3>
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -237,21 +224,27 @@
                                         <option value="">O'qituvchini tanlang</option>
                                         {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                     </select>
-                                    <input value={aInp.subject} onChange={e => setAInp({...aInp, subject: e.target.value})} placeholder="FAN NOMI (KATTA HARFLARDA)" className="w-full p-3.5 rounded-2xl text-slate-800 text-sm font-black uppercase placeholder:text-slate-400" />
+                                    <input value={aInp.subject} onChange={e => setAInp({...aInp, subject: e.target.value})} placeholder="FAN NOMI" className="w-full p-3.5 rounded-2xl text-slate-800 text-sm font-black uppercase placeholder:text-slate-400" />
                                 </div>
                                 <div className="space-y-4">
                                     <div className="flex gap-2">
                                         <select value={aInp.type} onChange={e => setAInp({...aInp, type: e.target.value})} className="flex-1 p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
-                                            <option value="Amaliy">Amaliy (6s/blok)</option>
-                                            <option value="Nazariy">Nazariy (2s/blok)</option>
+                                            <option value="Amaliy">Amaliy</option>
+                                            <option value="Nazariy">Nazariy</option>
                                         </select>
+                                        <select value={aInp.semester} onChange={e => setAInp({...aInp, semester: parseInt(e.target.value)})} className="flex-1 p-3.5 rounded-2xl text-blue-600 bg-blue-50 text-sm font-black outline-none border-2 border-white">
+                                            <option value="1">1-Semestr</option>
+                                            <option value="2">2-Semestr</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 bg-blue-700/40 p-3.5 rounded-2xl border border-blue-400/30 flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase">Soat:</span>
+                                            <input type="number" value={aInp.totalHours} onChange={e => setAInp({...aInp, totalHours: e.target.value})} className="w-12 bg-transparent text-right font-black outline-none" />
+                                        </div>
                                         <select value={aInp.priority} onChange={e => setAInp({...aInp, priority: parseInt(e.target.value)})} className="w-24 p-3.5 rounded-2xl text-slate-800 text-sm font-bold outline-none">
                                             {[1,2,3,4,5,6,7,8,9,10].map(p => <option key={p} value={p}>Prio {p}</option>)}
                                         </select>
-                                    </div>
-                                    <div className="bg-blue-700/40 p-3.5 rounded-2xl border border-blue-400/30 flex items-center justify-between">
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Jami dars soati:</span>
-                                        <input type="number" value={aInp.totalHours} onChange={e => setAInp({...aInp, totalHours: e.target.value})} className="w-16 bg-transparent text-right font-black text-xl outline-none" />
                                     </div>
                                     <button onClick={addAssign} className="w-full bg-white text-blue-600 py-4 rounded-3xl font-black text-xs uppercase hover:bg-blue-50 transition-all active:scale-[0.97]">
                                         Ro'yxatga Qo'shish
@@ -260,19 +253,15 @@
                             </div>
                         </div>
 
-                        {/* 3. Hisoblash */}
                         <div className="flex flex-col gap-4">
                             <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 flex-1">
-                                <h4 className="text-[10px] font-black text-emerald-600 uppercase mb-4 tracking-widest">Tizim Holati:</h4>
+                                <h4 className="text-[10px] font-black text-emerald-600 uppercase mb-4 tracking-widest">Ma'lumotlar:</h4>
                                 <div className="space-y-3">
                                     <div className="flex justify-between text-xs font-bold text-slate-600">
                                         <span>Guruhlar:</span> <span>{groups.length}</span>
                                     </div>
                                     <div className="flex justify-between text-xs font-bold text-slate-600">
-                                        <span>Fanlar:</span> <span>{assignments.filter(a => parseInt(a.semester) === currentSem).length}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs font-bold text-slate-600">
-                                        <span>O'qituvchilar:</span> <span>{teachers.length}</span>
+                                        <span>Barcha fanlar:</span> <span>{assignments.length}</span>
                                     </div>
                                 </div>
                             </div>
@@ -283,8 +272,7 @@
                     </div>
 
                     {/* Schedule View */}
-                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border-none">
-                        
+                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border-none mb-8">
                         <div className="no-print p-6 border-b flex flex-wrap gap-2 items-center bg-slate-50/50">
                             {groups.map(g => (
                                 <button key={g.id} onClick={() => setCurrentGroup(g.name)} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${currentGroup === g.name ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-white text-slate-400 border hover:border-blue-200'}`}>
@@ -299,7 +287,6 @@
                         <div className="p-8 lg:p-12 min-h-[600px]">
                             {currentGroup && schedule[currentGroup] ? (
                                 <div className="schedule-page">
-                                    {/* Print Header */}
                                     <div className="print-only mb-12">
                                         <div className="flex justify-between items-start text-[11px] font-bold uppercase text-center">
                                             <div className="w-1/3 border-b border-black pb-8">
@@ -319,7 +306,6 @@
                                         </div>
                                     </div>
 
-                                    {/* Grid */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                                         {daysArr.map((day, dIdx) => {
                                             const isHoliday = holidays[`${currentGroup}-${dIdx}`];
@@ -330,12 +316,7 @@
                                                     <div className="bg-white p-5 border-b flex justify-between items-center print:border-black">
                                                         <span className="text-[12px] font-black text-slate-800 uppercase tracking-widest">{day}</span>
                                                         <label className="no-print flex items-center gap-2 cursor-pointer">
-                                                            <input 
-                                                                type="checkbox" 
-                                                                checked={isHoliday || false} 
-                                                                onChange={() => !isClosed && toggleHoliday(currentGroup, dIdx)}
-                                                                className="w-4 h-4 rounded text-red-600 focus:ring-red-500"
-                                                            />
+                                                            <input type="checkbox" checked={isHoliday || false} onChange={() => !isClosed && toggleHoliday(currentGroup, dIdx)} className="w-4 h-4 rounded text-red-600 focus:ring-red-500" />
                                                             <span className="text-[9px] font-bold text-slate-400 uppercase">Bayram</span>
                                                         </label>
                                                     </div>
@@ -343,7 +324,7 @@
                                                     <div className={`p-5 space-y-4 ${isHoliday ? 'slot-holiday' : ''}`}>
                                                         {schedule[currentGroup][dIdx].map((slot, sIdx) => {
                                                             const maxPara = daySettings[dIdx] / 2;
-                                                            if (sIdx >= maxPara && !isClosed) return <div key={sIdx} className="h-8 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center text-[8px] font-bold text-slate-300 uppercase tracking-widest">Limitdan tashqari</div>;
+                                                            if (sIdx >= maxPara && !isClosed) return <div key={sIdx} className="h-8 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center text-[8px] font-bold text-slate-300 uppercase">Limit</div>;
                                                             if (isClosed) return null;
 
                                                             return (
@@ -360,51 +341,37 @@
                                                                         <div className="space-y-1">
                                                                             <div className="text-[13px] font-black uppercase leading-tight tracking-tight">{slot.subject}</div>
                                                                             <div className="text-[10px] font-bold opacity-80 italic text-slate-500">{slot.teacher}</div>
-                                                                            {slot.conflict && <div className="text-[8px] font-black mt-3 pt-2 border-t border-white/20 uppercase tracking-widest">⚠️ PARALLEL DARS</div>}
+                                                                            {slot.conflict && <div className="text-[8px] font-black mt-3 pt-2 border-t border-white/20 uppercase">⚠️ KONFLIKT</div>}
                                                                         </div>
                                                                     ) : (
                                                                         <div className="h-12 flex items-center justify-center opacity-5">
-                                                                            <span className="text-[10px] font-black uppercase tracking-[0.4em]">{isHoliday ? "" : "BO'SH SLOT"}</span>
+                                                                            <span className="text-[10px] font-black uppercase tracking-[0.4em]">{isHoliday ? "" : "BO'SH"}</span>
                                                                         </div>
                                                                     )}
                                                                 </div>
                                                             );
                                                         })}
                                                     </div>
-                                                    
-                                                    {isHoliday && (
-                                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                            <div className="rotate-[30deg] border-4 border-red-500/20 px-6 py-2 rounded-xl">
-                                                                <span className="text-red-500/20 font-black text-5xl uppercase tracking-tighter">BAYRAM</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
 
-                                    {/* Print Footer */}
                                     <div className="print-only mt-20 pt-10 border-t-2 border-black">
                                         <div className="grid grid-cols-2 gap-20 text-[11px] font-bold uppercase">
                                             <div className="space-y-8">
                                                 <div className="flex justify-between border-b border-black pb-1">
                                                     <span>Katta o'qituvchi:</span>
-                                                    <span className="italic font-normal">F.I.SH ____________________</span>
+                                                    <span className="italic font-normal">____________________</span>
                                                 </div>
                                                 <div className="flex justify-between border-b border-black pb-1">
                                                     <span>O'quv uslubchi (ICHTU):</span>
-                                                    <span className="italic font-normal">F.I.SH ____________________</span>
+                                                    <span className="italic font-normal">____________________</span>
                                                 </div>
                                             </div>
-                                            <div className="space-y-8">
-                                                <div className="flex justify-between border-b border-black pb-1">
-                                                    <span>Bo'lim boshlig'i:</span>
-                                                    <span className="italic font-normal">F.I.SH ____________________</span>
-                                                </div>
-                                                <div className="text-right pt-6 opacity-40 text-[9px]">
-                                                    KOICA Smart Scheduler System v3.0 | 2025
-                                                </div>
+                                            <div className="space-y-8 text-right">
+                                                <p>SAMARQAND KOICA © 2025</p>
+                                                <p className="text-[9px] opacity-40">System Architect: Xujamatov R.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -412,10 +379,21 @@
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-40 text-slate-300">
                                     <div className="text-8xl mb-8 animate-bounce">📅</div>
-                                    <h3 className="text-xl font-black uppercase tracking-[0.5em]">Ma'lumotlarni kiriting va jadvalni hisoblang</h3>
-                                    <p className="mt-4 text-sm font-medium">Algoritm barcha cheklovlarni avtomatik tekshiradi</p>
+                                    <h3 className="text-xl font-black uppercase tracking-[0.5em]">Jadvalni hisoblang</h3>
                                 </div>
                             )}
+                        </div>
+                    </div>
+
+                    {/* Footer / Author Section */}
+                    <div className="no-print mt-auto py-10 flex flex-col items-center">
+                        <div className="author-badge px-10 py-5 rounded-[2.5rem] flex flex-col items-center space-y-2 border border-slate-700">
+                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Platforma Muallifi</span>
+                            <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20">XR</div>
+                                <h4 className="text-white font-black text-xl tracking-tighter">Xujamatov R.</h4>
+                            </div>
+                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest pt-2">Samarkand KOICA Center © 2025</p>
                         </div>
                     </div>
                 </div>
