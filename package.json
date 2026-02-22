@@ -1,0 +1,13 @@
+{
+  "name": "dars-jadvali-sam-koica",
+  "private": true,
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "dev": "concurrently \"npm:dev --workspace backend\" \"npm:dev --workspace frontend\"",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "lint": "npm run lint --workspace backend && npm run lint --workspace frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
