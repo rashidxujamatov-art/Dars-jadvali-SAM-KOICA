@@ -3,483 +3,452 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICHTU - Avtomatik Dars Jadvali</title>
+    <title>ICHTU - Rasmiy Dars Jadvali (Tahrirlash bilan)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .schedule-grid { display: grid; grid-template-columns: 100px repeat(6, 1fr); gap: 6px; }
-        .slot-card { min-height: 90px; transition: all 0.2s; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: 8px; padding: 4px; }
-        .slot-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .conflict { background-color: #fee2e2; border: 2px solid #ef4444; color: #b91c1c; }
-        .normal { background-color: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1; }
-        .practical { background-color: #dcfce7; border: 1px solid #86efac; color: #15803d; }
-        .empty-slot { background-color: #ffffff; border: 1px dashed #cbd5e1; color: #94a3b8; }
-        .closed-day { background-color: #f1f5f9; border: 1px solid #e2e8f0; opacity: 0.6; cursor: not-allowed; }
+        .slot-card { min-height: 90px; transition: all 0.2s; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: 12px; padding: 6px; position: relative; }
+        .slot-card:hover { transform: scale(1.02); z-index: 10; }
+        .normal { background-color: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+        .practical { background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+        .empty-slot { background-color: #ffffff; border: 1px dashed #e2e8f0; color: #94a3b8; }
+        .blocked-slot { background-color: #fef2f2; border: 2px solid #fecaca; color: #991b1b; }
+        .blocked-slot::after { content: '🔒'; position: absolute; top: 4px; right: 4px; font-size: 10px; }
+        .week-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        #pdfHeaderSection { display: none; }
     </style>
 </head>
-<body class="p-4 md:p-6">
+<body class="p-4 md:p-8">
     <div id="app" class="max-w-[1600px] mx-auto">
         <!-- Header -->
-        <header class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div class="mb-4 md:mb-0">
-                <h1 class="text-2xl font-black text-slate-800 tracking-tight">📘 DARS JADVALI TIZIMI</h1>
-                <p class="text-slate-500 text-sm font-medium">ICHTU • Avtomatik optimallashtirish va semestr boshqaruvi</p>
+        <header class="flex flex-col lg:flex-row justify-between items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <div class="mb-4 lg:mb-0">
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight">🗓️ O'QUV REJALI JADVAL</h1>
+                <p class="text-slate-500 font-medium">Barcha ma'lumotlarni tahrirlash imkoniyati bilan</p>
             </div>
-            <div class="flex gap-3">
-                <div class="flex items-center bg-slate-100 rounded-xl px-3 border border-slate-200">
-                    <label class="text-[10px] font-bold text-slate-400 uppercase mr-2">Semestr:</label>
-                    <select id="activeSemesterFilter" class="bg-transparent text-sm font-bold outline-none py-2">
+            <div class="flex flex-wrap gap-3 justify-center">
+                <div class="flex items-center bg-slate-100 rounded-2xl px-4 border border-slate-200">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mr-3">Semestr:</label>
+                    <select id="activeSemesterFilter" class="bg-transparent text-sm font-black outline-none py-3" onchange="resetAndReGen()">
                         <option value="1">1-Semestr</option>
                         <option value="2">2-Semestr</option>
                     </select>
                 </div>
-                <button onclick="generateSchedule()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95">
-                    🔄 Jadvalni Hisoblash
+                <button onclick="generateFullCycle()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-2xl font-black shadow-xl shadow-indigo-100 transition-all active:scale-95">
+                    🚀 To'liq Rejani Tuzish
                 </button>
-                <button onclick="exportToPDF()" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-slate-300 transition-all active:scale-95">
+                <button onclick="exportToPDF()" class="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-2xl font-black shadow-xl shadow-slate-200 transition-all active:scale-95">
                     📥 PDF Eksport
                 </button>
             </div>
         </header>
 
-        <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
             <!-- Sidebar -->
             <aside class="xl:col-span-1 space-y-6">
-                <!-- Ma'lumotlar Kiritish -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h2 class="font-bold text-slate-800 mb-5 flex items-center gap-2 text-lg">
+                <!-- Fan Kiritish / Tahrirlash -->
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                    <h2 id="formTitle" class="font-black text-slate-800 mb-6 flex items-center gap-2">
                         <span class="w-2 h-6 bg-indigo-500 rounded-full"></span>
-                        Fan Kiritish
+                        Yangi Fan Qo'shish
                     </h2>
-                    
                     <div class="space-y-4">
-                        <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guruhni Tanlang</label>
-                            <div class="flex gap-2">
-                                <select id="groupSelect" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition"></select>
-                                <button onclick="promptNewItem('group')" class="bg-slate-200 p-2.5 rounded-lg hover:bg-slate-300">➕</button>
+                        <input type="hidden" id="editSubjectId">
+                        <div class="grid grid-cols-1 gap-4">
+                            <div>
+                                <label class="text-[11px] font-bold text-slate-400 uppercase ml-1">Guruh</label>
+                                <div class="flex gap-2">
+                                    <select id="groupSelect" class="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none"></select>
+                                    <button onclick="editItem('group')" class="bg-slate-100 p-3 rounded-xl hover:bg-slate-200">✏️</button>
+                                    <button onclick="promptNewItem('group')" class="bg-slate-100 p-3 rounded-xl hover:bg-slate-200">➕</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[11px] font-bold text-slate-400 uppercase ml-1">O'qituvchi</label>
+                                <div class="flex gap-2">
+                                    <select id="teacherSelect" class="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none"></select>
+                                    <button onclick="editItem('teacher')" class="bg-slate-100 p-3 rounded-xl hover:bg-slate-200">✏️</button>
+                                    <button onclick="promptNewItem('teacher')" class="bg-slate-100 p-3 rounded-xl hover:bg-slate-200">➕</button>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">O'qituvchini Tanlang</label>
-                            <div class="flex gap-2">
-                                <select id="teacherSelect" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition"></select>
-                                <button onclick="promptNewItem('teacher')" class="bg-slate-200 p-2.5 rounded-lg hover:bg-slate-300">➕</button>
+                        <input id="subjectName" type="text" placeholder="Fan nomi" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[11px] font-bold text-slate-400 uppercase ml-1">Soat</label>
+                                <input id="subjectHours" type="number" placeholder="72" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-center">
                             </div>
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Fan nomi va Semestr</label>
-                            <div class="flex gap-2">
-                                <input id="subjectName" type="text" placeholder="Fan nomi" class="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                                <select id="subjectSemester" class="w-24 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                                    <option value="1">1-Sem</option>
-                                    <option value="2">2-Sem</option>
+                            <div>
+                                <label class="text-[11px] font-bold text-slate-400 uppercase ml-1">Dars Turi</label>
+                                <select id="subjectType" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                                    <option value="nazariy">Ma'ruza (2s)</option>
+                                    <option value="amaliy">Amaliy (2s)</option>
+                                    <option value="laboratoriya">Lab (4s)</option>
                                 </select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Hajmi (Soat)</label>
-                                <input id="subjectHours" type="number" placeholder="36" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
-                            </div>
-                            <div>
-                                <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Turi</label>
-                                <select id="subjectType" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                                    <option value="amaliy">Amaliy (6s)</option>
-                                    <option value="nazariy">Nazariy (2s)</option>
-                                </select>
-                            </div>
+                        <div class="flex gap-2">
+                            <button id="submitBtn" onclick="addData()" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black py-4 rounded-2xl border border-indigo-200 transition-all">
+                                ✅ Qo'shish
+                            </button>
+                            <button id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-600 font-black py-4 px-6 rounded-2xl transition-all">
+                                Bekor
+                            </button>
                         </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1">Prioritet (1-10)</label>
-                            <input id="priority" type="number" value="1" min="1" max="10" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition text-center">
-                        </div>
-                        <button onclick="addData()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-3 rounded-xl border border-indigo-200 transition-all active:scale-95 mt-2">
-                            ➕ Ro'yxatga Qo'shish
-                        </button>
                     </div>
                 </div>
 
-                <!-- Fanlar Ro'yxati -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h2 class="font-bold text-slate-800 mb-4 flex items-center justify-between">
-                        Kiritilgan Fanlar
-                        <span id="subjectCount" class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full">0 ta</span>
+                <!-- Fanlar Progressi -->
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                    <h2 class="font-black text-slate-800 mb-4 flex justify-between items-center text-sm">
+                        O'QUV REJASI
+                        <span id="subjectCount" class="text-xs bg-slate-100 px-2 py-1 rounded-lg">0 ta</span>
                     </h2>
-                    <div id="dataList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                        <p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>
-                    </div>
+                    <div id="dataList" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar"></div>
                 </div>
             </aside>
 
-            <!-- Main Content -->
+            <!-- Main Panel -->
             <main class="xl:col-span-3 space-y-6">
-                <!-- Kunlik Juftliklar Sozlamasi -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h2 class="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Haftalik kunlar va maksimal juftliklar soni</h2>
-                    <div id="daySettings" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <!-- JS orqali generatsiya qilinadi -->
-                    </div>
-                </div>
+                <!-- Hafta Tanlagich -->
+                <div id="weekNavigator" class="flex gap-2 overflow-x-auto pb-2 custom-scrollbar"></div>
 
                 <!-- Jadval Maydoni -->
-                <div id="printableArea" class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
-                    <!-- PDF Header -->
-                    <div id="pdfHeader" class="hidden mb-8">
-                        <div class="flex justify-between items-start border-b-2 border-slate-900 pb-6">
-                            <div class="w-1/3">
-                                <p class="font-black text-sm">"TASDIQLAYMAN"</p>
-                                <p class="text-[10px] text-slate-600 mt-1 uppercase">O'quv ishlari bo'yicha prorektor</p>
-                                <div class="mt-8 border-b border-slate-400 w-48"></div>
-                                <p class="text-[10px] mt-1 italic">F.I.O. _________________</p>
+                <div id="printableArea" class="bg-white p-10 rounded-[32px] shadow-sm border border-slate-200">
+                    
+                    <!-- Rasmiy PDF Header -->
+                    <div id="pdfHeaderSection" class="mb-10">
+                        <div class="flex justify-end mb-10">
+                            <div class="text-left w-72">
+                                <p class="font-bold text-sm uppercase">"Tasdiqlayman"</p>
+                                <p class="text-[11px] leading-tight mt-1">O'quv ishlari bo'yicha direktor o'rinbosari</p>
+                                <div class="mt-8 border-b border-black w-full flex justify-between items-end">
+                                    <span class="text-[9px]">Imzo: __________</span>
+                                    <span id="pdfDateDisplay" class="text-[11px] font-bold mb-1"></span>
+                                </div>
+                                <p class="text-[9px] mt-1 text-slate-500 italic">F.I.O. ________________________</p>
                             </div>
-                            <div class="w-1/3 text-center">
-                                <h2 class="text-3xl font-black text-slate-900 leading-none">ICHTU</h2>
-                                <p class="text-xs font-bold mt-2 uppercase tracking-widest text-slate-500 italic">Oliy ta'lim muassasasi</p>
-                                <div class="mt-4 inline-block bg-slate-900 text-white px-4 py-1 rounded text-[10px] font-bold">2024-2025 O'QUV YILI</div>
-                            </div>
-                            <div class="w-1/3 text-right">
-                                <p class="text-[10px] font-bold uppercase text-slate-400">Hujjat raqami: #JAD-2024-001</p>
-                                <p class="text-xs mt-2">Sana: <span id="currentDate" class="font-bold"></span></p>
-                            </div>
+                        </div>
+                        
+                        <div class="text-center">
+                            <h2 class="text-3xl font-black tracking-widest text-black">DARS JADVALI</h2>
+                            <h3 id="pdfGroupDisplay" class="text-xl font-bold mt-2 text-slate-800 uppercase">---</h3>
+                            <div id="pdfWeekLabel" class="mt-2 inline-block bg-black text-white px-4 py-1 text-xs font-bold rounded">1-HAFTA</div>
                         </div>
                     </div>
 
-                    <h2 id="scheduleTitle" class="text-center font-black text-2xl mb-6 text-slate-800 uppercase tracking-tight">
-                        DARS JADVALI: <span id="activeGroupDisplay" class="text-indigo-600 underline decoration-indigo-200">---</span>
-                        <div class="text-xs text-slate-400 mt-1" id="activeSemesterDisplay">1-SEMESTR</div>
-                    </h2>
-
-                    <!-- Jadval Sarlavhasi -->
-                    <div class="schedule-grid text-center font-black text-[11px] text-slate-400 uppercase tracking-widest mb-4">
-                        <div class="py-2">Vaqt / Kun</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Dushanba</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Seshanba</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Chorshanba</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Payshanba</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Juma</div>
-                        <div class="py-2 bg-slate-50 rounded-t-lg text-slate-600">Shanba</div>
-                    </div>
-
-                    <div id="scheduleBody" class="space-y-1.5 min-w-[900px]">
-                        <!-- JS orqali generatsiya qilinadi -->
-                    </div>
-
-                    <!-- PDF Footer -->
-                    <div id="pdfFooter" class="hidden mt-12 border-t-2 border-slate-100 pt-8">
-                        <div class="grid grid-cols-2 gap-12">
-                            <div>
-                                <h3 class="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider underline">Mas'ul o'qituvchilar</h3>
-                                <ul id="teacherListFooter" class="text-[10px] space-y-2 text-slate-600 columns-2">
-                                    <!-- Dinamik -->
-                                </ul>
-                            </div>
-                            <div class="flex flex-col items-end justify-between">
-                                <div class="text-right">
-                                    <p class="text-sm font-bold text-slate-900">ICHTU O'QUV BO'LIMI</p>
-                                    <p class="text-[9px] text-slate-500">Tizim orqali avtomatik shakllantirildi</p>
-                                </div>
-                                <div class="mt-8 text-center border-t border-slate-900 pt-2 w-48">
-                                    <p class="text-[10px] font-bold uppercase">Bo'lim boshlig'i imzosi</p>
-                                </div>
-                            </div>
+                    <!-- UI Header -->
+                    <div id="uiHeader" class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4 border-b border-slate-100 pb-6">
+                        <div>
+                            <h2 id="activeWeekDisplay" class="text-4xl font-black text-slate-900 uppercase">1-HAFTA</h2>
+                            <p class="text-slate-400 font-bold text-sm tracking-widest mt-1 uppercase">Guruh: <span id="activeGroupDisplay" class="text-indigo-600">---</span></p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] font-black text-slate-300 uppercase block">Umumiy Progress</span>
+                            <span id="overallProgress" class="text-2xl font-black text-slate-800">0%</span>
                         </div>
                     </div>
+
+                    <!-- Grid Layout -->
+                    <div class="schedule-grid text-center font-black text-[11px] text-slate-400 uppercase tracking-tighter mb-4">
+                        <div class="py-2">VAQT</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Dushanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Seshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Chorshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Payshanba</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Juma</div>
+                        <div class="py-2 bg-slate-50 rounded-t-lg">Shanba</div>
+                    </div>
+
+                    <div id="scheduleBody" class="space-y-2"></div>
                 </div>
             </main>
         </div>
     </div>
 
-    <!-- Simple Custom Modal for Input -->
-    <div id="customModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 id="modalTitle" class="text-lg font-bold mb-4">Yangi qo'shish</h3>
-            <input id="modalInput" type="text" class="w-full p-3 border border-slate-200 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-indigo-500">
-            <div class="flex gap-2">
-                <button onclick="closeModal()" class="flex-1 bg-slate-100 py-2 rounded-xl font-bold">Bekor qilish</button>
-                <button id="modalConfirm" class="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-bold">Saqlash</button>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // State
-        let appData = {
+        let state = {
             subjects: [],
-            schedule: {}, 
-            groups: ["211-Guruh", "212-Guruh"],
-            teachers: ["Aliyev V.", "Usmonov J.", "Karimov S."],
-            dayLimits: [8, 8, 8, 8, 8, 8]
+            weeks: [],
+            currentWeekIdx: 0,
+            groups: ["KOM-101", "KOM-102", "LOG-205"],
+            teachers: ["Prof. Aliyev", "Dos. Karimov", "O'qit. Sobirova"],
+            blockedSlots: {},
+            dayLimits: [8, 8, 8, 8, 8, 8],
+            isEditing: false
         };
 
-        const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-        const TIME_SLOTS = ["08:30 - 09:50", "10:00 - 11:20", "11:30 - 12:50", "13:30 - 14:50", "15:00 - 16:20"];
+        const TIMES = ["08:30-09:50", "10:00-11:20", "11:30-12:50", "13:30-14:50", "15:00-16:20"];
 
-        // UI Helpers
-        function initDaySettings() {
-            const container = document.getElementById('daySettings');
-            container.innerHTML = DAYS.map((day, idx) => `
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">${day}</label>
-                    <select onchange="updateDayLimit(${idx}, this.value)" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="0">Yopiq</option>
-                        <option value="2">1 Juftlik</option>
-                        <option value="4">2 Juftlik</option>
-                        <option value="6">3 Juftlik</option>
-                        <option value="8" selected>4 Juftlik</option>
-                        <option value="10">5 Juftlik</option>
-                    </select>
-                </div>
-            `).join('');
-        }
+        window.onload = () => {
+            updateDropdowns();
+            renderHaftaNav();
+            renderSchedule();
+        };
 
         function updateDropdowns() {
-            const groupSelect = document.getElementById('groupSelect');
-            const teacherSelect = document.getElementById('teacherSelect');
-            
-            groupSelect.innerHTML = appData.groups.map(g => `<option value="${g}">${g}</option>`).join('');
-            teacherSelect.innerHTML = appData.teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+            document.getElementById('groupSelect').innerHTML = state.groups.map(g => `<option value="${g}">${g}</option>`).join('');
+            document.getElementById('teacherSelect').innerHTML = state.teachers.map(t => `<option value="${t}">${t}</option>`).join('');
         }
 
-        function updateDayLimit(idx, val) {
-            appData.dayLimits[idx] = parseInt(val);
-        }
-
-        // Modal Logic
-        let currentModalTarget = '';
         function promptNewItem(type) {
-            currentModalTarget = type;
-            document.getElementById('modalTitle').innerText = type === 'group' ? 'Yangi Guruh' : 'Yangi O\'qituvchi';
-            document.getElementById('modalInput').value = '';
-            document.getElementById('customModal').classList.remove('hidden');
-            document.getElementById('modalInput').focus();
-        }
-
-        function closeModal() {
-            document.getElementById('customModal').classList.add('hidden');
-        }
-
-        document.getElementById('modalConfirm').onclick = () => {
-            const val = document.getElementById('modalInput').value.trim();
+            const val = prompt(`Yangi ${type === 'group' ? 'guruh' : 'o\'qituvchi'} nomini kiriting:`);
             if (val) {
-                if (currentModalTarget === 'group') appData.groups.push(val);
-                else appData.teachers.push(val);
+                if (type === 'group') state.groups.push(val.toUpperCase());
+                else state.teachers.push(val);
                 updateDropdowns();
-                closeModal();
             }
-        };
+        }
 
-        // Data Management
+        function editItem(type) {
+            const selectId = type === 'group' ? 'groupSelect' : 'teacherSelect';
+            const currentVal = document.getElementById(selectId).value;
+            const newVal = prompt(`Tahrirlash:`, currentVal);
+            if (newVal && newVal !== currentVal) {
+                if (type === 'group') {
+                    const idx = state.groups.indexOf(currentVal);
+                    state.groups[idx] = newVal.toUpperCase();
+                    // Update linked subjects
+                    state.subjects.filter(s => s.group === currentVal).forEach(s => s.group = newVal.toUpperCase());
+                } else {
+                    const idx = state.teachers.indexOf(currentVal);
+                    state.teachers[idx] = newVal;
+                    state.subjects.filter(s => s.teacher === currentVal).forEach(s => s.teacher = newVal);
+                }
+                updateDropdowns();
+                updateSubjectUI();
+                resetAndReGen();
+            }
+        }
+
         function addData() {
-            const group = document.getElementById('groupSelect').value;
-            const teacher = document.getElementById('teacherSelect').value;
-            const name = document.getElementById('subjectName').value.trim().toUpperCase();
-            const semester = document.getElementById('subjectSemester').value;
+            const name = document.getElementById('subjectName').value.trim();
             const hours = parseInt(document.getElementById('subjectHours').value);
-            const type = document.getElementById('subjectType').value;
-            const priority = parseInt(document.getElementById('priority').value);
+            const editId = document.getElementById('editSubjectId').value;
+            
+            if (!name || isNaN(hours)) return;
 
-            if (!name || isNaN(hours)) {
-                return; // Silently fail or add visual feedback
+            if (state.isEditing) {
+                const sub = state.subjects.find(s => s.id === editId);
+                sub.name = name.toUpperCase();
+                sub.totalHours = hours;
+                sub.group = document.getElementById('groupSelect').value;
+                sub.teacher = document.getElementById('teacherSelect').value;
+                sub.type = document.getElementById('subjectType').value;
+                sub.color = sub.type === 'nazariy' ? 'normal' : 'practical';
+                cancelEdit();
+            } else {
+                state.subjects.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    name: name.toUpperCase(),
+                    group: document.getElementById('groupSelect').value,
+                    teacher: document.getElementById('teacherSelect').value,
+                    totalHours: hours,
+                    placedHours: 0,
+                    type: document.getElementById('subjectType').value,
+                    semester: document.getElementById('activeSemesterFilter').value,
+                    color: document.getElementById('subjectType').value === 'nazariy' ? 'normal' : 'practical'
+                });
             }
+            
+            updateSubjectUI();
+            resetAndReGen();
+            clearForm();
+        }
 
-            const subjectObj = {
-                id: Date.now(),
-                group,
-                teacher,
-                name,
-                semester,
-                totalHours: hours,
-                remainingHours: hours,
-                type,
-                priority,
-                color: type === 'amaliy' ? 'practical' : 'normal'
-            };
+        function editSubject(id) {
+            const sub = state.subjects.find(s => s.id === id);
+            if (!sub) return;
 
-            appData.subjects.push(subjectObj);
-            updateDataList();
+            state.isEditing = true;
+            document.getElementById('editSubjectId').value = id;
+            document.getElementById('subjectName').value = sub.name;
+            document.getElementById('subjectHours').value = sub.totalHours;
+            document.getElementById('groupSelect').value = sub.group;
+            document.getElementById('teacherSelect').value = sub.teacher;
+            document.getElementById('subjectType').value = sub.type;
+            
+            document.getElementById('formTitle').innerText = "Fanni Tahrirlash";
+            document.getElementById('submitBtn').innerText = "💾 Saqlash";
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+        }
+
+        function cancelEdit() {
+            state.isEditing = false;
+            clearForm();
+            document.getElementById('formTitle').innerText = "Yangi Fan Qo'shish";
+            document.getElementById('submitBtn').innerText = "✅ Qo'shish";
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
+
+        function clearForm() {
             document.getElementById('subjectName').value = '';
             document.getElementById('subjectHours').value = '';
+            document.getElementById('editSubjectId').value = '';
         }
 
-        function updateDataList() {
+        function updateSubjectUI() {
             const list = document.getElementById('dataList');
-            document.getElementById('subjectCount').innerText = `${appData.subjects.length} ta`;
-
-            if (appData.subjects.length === 0) {
-                list.innerHTML = `<p class="text-slate-400 text-xs text-center py-8">Hozircha fanlar yo'q</p>`;
-                return;
-            }
-
-            list.innerHTML = appData.subjects.map(s => `
-                <div class="relative bg-white p-3 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all shadow-sm">
-                    <div class="flex justify-between items-start">
-                        <div class="pr-6">
-                            <span class="text-xs font-black text-slate-800 block leading-tight">${s.name}</span>
-                            <div class="text-[9px] text-slate-500 mt-1 space-x-1">
-                                <span class="bg-indigo-50 text-indigo-600 px-1 rounded font-bold">${s.semester}-sem</span>
-                                <span class="bg-slate-100 px-1 rounded">${s.type.toUpperCase()}</span>
-                                <span>${s.teacher}</span> • <span>${s.totalHours}s</span>
-                            </div>
+            document.getElementById('subjectCount').innerText = `${state.subjects.length} ta`;
+            list.innerHTML = state.subjects.map(s => {
+                const percent = Math.min(100, Math.round((s.placedHours / s.totalHours) * 100));
+                return `
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 group cursor-pointer hover:bg-slate-100 transition-all" onclick="editSubject('${s.id}')">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="text-xs font-black text-slate-800">${s.name}</h4>
+                            <p class="text-[9px] text-slate-400 font-bold">${s.group} | ${s.teacher}</p>
                         </div>
-                        <button onclick="removeData(${s.id})" class="text-slate-300 hover:text-red-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
+                        <button onclick="event.stopPropagation(); removeSub('${s.id}')" class="text-slate-300 hover:text-red-500">✕</button>
                     </div>
-                </div>
-            `).join('');
+                    <div class="h-1 bg-slate-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-indigo-500" style="width: ${percent}%"></div>
+                    </div>
+                    <p class="text-[9px] mt-1 font-bold text-slate-400">${s.placedHours}/${s.totalHours} soat</p>
+                </div>`;
+            }).join('');
         }
 
-        function removeData(id) {
-            appData.subjects = appData.subjects.filter(s => s.id !== id);
-            updateDataList();
+        function removeSub(id) {
+            state.subjects = state.subjects.filter(s => s.id !== id);
+            resetAndReGen();
+            updateSubjectUI();
         }
 
-        // Generator Logic
-        function generateSchedule() {
-            const activeSemester = document.getElementById('activeSemesterFilter').value;
-            const groupList = Array.from(new Set(appData.subjects.map(s => s.group)));
-            
-            if (groupList.length === 0) {
-                alert("Fanlar kiritilmagan!");
-                return;
-            }
+        function generateFullCycle() {
+            const sem = document.getElementById('activeSemesterFilter').value;
+            const targetGroup = document.getElementById('groupSelect').value; 
+            if (state.subjects.length === 0) return alert("Fanlar yo'q!");
 
-            // Soddalik uchun birinchi guruhni ko'rsatamiz
-            const targetGroup = groupList[0];
+            state.weeks = [];
+            state.subjects.forEach(s => s.placedHours = 0);
             document.getElementById('activeGroupDisplay').innerText = targetGroup;
-            document.getElementById('activeSemesterDisplay').innerText = `${activeSemester}-SEMESTR`;
-            appData.schedule = {}; 
 
-            // Algoritm: Faqat tanlangan semestr va guruh uchun
-            const sortedSubjects = [...appData.subjects]
-                .filter(s => s.group === targetGroup && s.semester === activeSemester)
-                .sort((a, b) => {
-                    if (a.priority !== b.priority) return b.priority - a.priority;
-                    return (a.type === 'amaliy' ? -1 : 1);
-                });
+            let cycleLimit = 0;
+            const relevantSubs = state.subjects.filter(s => s.semester === sem && s.group === targetGroup);
 
-            sortedSubjects.forEach(s => s.remainingHours = s.totalHours);
-
-            const teacherDayLoad = {}; 
-
-            for (let s of sortedSubjects) {
-                const blockSize = s.type === 'amaliy' ? 6 : 2; 
-                
-                while (s.remainingHours >= blockSize) {
-                    let placed = false;
-
-                    for (let dayIdx = 0; dayIdx < 6; dayIdx++) {
-                        if (placed) break;
-                        const maxPairs = appData.dayLimits[dayIdx] / 2;
-                        if (maxPairs === 0) continue;
-
-                        const teacherKey = `${s.teacher}_${dayIdx}`;
-                        const currentLoad = teacherDayLoad[teacherKey] || 0;
-                        if (currentLoad + blockSize > 10) continue;
-
-                        const slotsNeeded = blockSize / 2;
-
-                        for (let slotIdx = 0; slotIdx <= maxPairs - slotsNeeded; slotIdx++) {
-                            let canPlace = true;
-                            for (let i = 0; i < slotsNeeded; i++) {
-                                if (appData.schedule[`${dayIdx}_${slotIdx + i}`]) {
-                                    canPlace = false;
-                                    break;
-                                }
-                            }
-
-                            if (canPlace) {
-                                for (let i = 0; i < slotsNeeded; i++) {
-                                    appData.schedule[`${dayIdx}_${slotIdx + i}`] = { ...s };
-                                }
-                                s.remainingHours -= blockSize;
-                                teacherDayLoad[teacherKey] = currentLoad + blockSize;
-                                placed = true;
-                                break;
+            while (relevantSubs.some(s => s.placedHours < s.totalHours) && cycleLimit < 20) {
+                const weekSchedule = {};
+                for (let day = 0; day < 6; day++) {
+                    const maxSlots = 4; // Max 4 pairs per day
+                    for (let slot = 0; slot < maxSlots; slot++) {
+                        if (state.blockedSlots[`${sem}_${day}_${slot}`]) continue;
+                        const sub = relevantSubs.find(s => s.placedHours < s.totalHours);
+                        if (sub) {
+                            const isLab = sub.type === 'laboratoriya';
+                            if (isLab && slot < maxSlots - 1) {
+                                weekSchedule[`${day}_${slot}`] = { ...sub };
+                                weekSchedule[`${day}_${slot+1}`] = { ...sub };
+                                sub.placedHours += 4; slot++;
+                            } else {
+                                weekSchedule[`${day}_${slot}`] = { ...sub };
+                                sub.placedHours += 2;
                             }
                         }
                     }
-                    if (!placed) break; 
                 }
+                state.weeks.push(weekSchedule);
+                cycleLimit++;
             }
-            renderSchedule();
+            state.currentWeekIdx = 0;
+            updateSubjectUI(); renderHaftaNav(); renderSchedule(); updateOverallProgress();
+        }
+
+        function renderHaftaNav() {
+            const nav = document.getElementById('weekNavigator');
+            nav.innerHTML = state.weeks.map((_, i) => `
+                <button onclick="setWeek(${i})" class="week-btn shrink-0 px-6 py-2 rounded-xl text-xs font-black border border-slate-200 bg-white ${state.currentWeekIdx === i ? 'active' : ''}">
+                    ${i + 1}-HAFTA
+                </button>
+            `).join('');
+        }
+
+        function setWeek(idx) {
+            state.currentWeekIdx = idx;
+            renderHaftaNav(); renderSchedule();
         }
 
         function renderSchedule() {
             const body = document.getElementById('scheduleBody');
+            const weekData = state.weeks[state.currentWeekIdx] || {};
+            const sem = document.getElementById('activeSemesterFilter').value;
+            document.getElementById('activeWeekDisplay').innerText = (state.currentWeekIdx + 1) + "-HAFTA";
+
             body.innerHTML = '';
-
-            for (let slotIdx = 0; slotIdx < 5; slotIdx++) {
-                let rowHtml = `<div class="schedule-grid">
-                    <div class="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-xl p-2 shadow-inner">
-                        <span class="text-[10px] font-black text-indigo-500">${slotIdx + 1}-JUFTLIK</span>
-                        <span class="text-[9px] font-bold text-slate-400 mt-1">${TIME_SLOTS[slotIdx]}</span>
+            for (let slot = 0; slot < 5; slot++) {
+                let row = `<div class="schedule-grid">
+                    <div class="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl p-2">
+                        <span class="text-[10px] font-black text-indigo-500">${slot + 1}</span>
+                        <span class="text-[8px] font-bold text-slate-400">${TIMES[slot].split('-')[0]}</span>
                     </div>`;
-                
-                for (let dayIdx = 0; dayIdx < 6; dayIdx++) {
-                    const data = appData.schedule[`${dayIdx}_${slotIdx}`];
-                    const isClosed = (appData.dayLimits[dayIdx] / 2) <= slotIdx;
-                    
-                    let cellClasses = "slot-card ";
-                    if (isClosed) cellClasses += "closed-day";
-                    else if (data) cellClasses += data.type === 'amaliy' ? "practical" : "normal";
-                    else cellClasses += "empty-slot";
-
-                    rowHtml += `
-                        <div class="${cellClasses}">
-                            ${data ? `
-                                <div class="text-[10px] font-black uppercase tracking-tighter leading-none mb-1">${data.name}</div>
-                                <div class="text-[9px] font-medium text-slate-500 truncate w-full px-1">${data.teacher}</div>
-                                <div class="mt-1 bg-white/40 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">${data.type}</div>
-                            ` : (isClosed ? '<span class="text-[8px] font-black opacity-30">YOPIQ</span>' : '')}
-                        </div>
-                    `;
+                for (let day = 0; day < 6; day++) {
+                    const data = weekData[`${day}_${slot}`];
+                    const isBlocked = state.blockedSlots[`${sem}_${day}_${slot}`];
+                    let cls = "slot-card " + (isBlocked ? "blocked-slot" : (data ? data.color : "empty-slot"));
+                    row += `<div class="${cls}" onclick="toggleLock(${day}, ${slot})">
+                        ${data ? `<span class="text-[10px] font-black leading-tight">${data.name}</span>
+                        <span class="text-[8px] mt-1 font-bold opacity-60">${data.teacher}</span>` : (isBlocked ? '🔒' : '')}
+                    </div>`;
                 }
-                rowHtml += `</div>`;
-                body.innerHTML += rowHtml;
+                body.innerHTML += row + '</div>';
             }
+        }
+
+        function toggleLock(day, slot) {
+            const sem = document.getElementById('activeSemesterFilter').value;
+            const key = `${sem}_${day}_${slot}`;
+            if (state.blockedSlots[key]) delete state.blockedSlots[key];
+            else state.blockedSlots[key] = true;
+            renderSchedule();
+        }
+
+        function resetAndReGen() {
+            state.weeks = []; state.subjects.forEach(s => s.placedHours = 0);
+            renderHaftaNav(); renderSchedule(); updateSubjectUI(); updateOverallProgress();
+        }
+
+        function updateOverallProgress() {
+            const activeSem = document.getElementById('activeSemesterFilter').value;
+            const group = document.getElementById('activeGroupDisplay').innerText;
+            const subs = state.subjects.filter(s => s.semester === activeSem && s.group === group);
+            if (subs.length === 0) {
+                document.getElementById('overallProgress').innerText = '0%';
+                return;
+            }
+            const total = subs.reduce((a, b) => a + b.totalHours, 0);
+            const placed = subs.reduce((a, b) => a + b.placedHours, 0);
+            document.getElementById('overallProgress').innerText = Math.round((placed / total) * 100) + '%';
         }
 
         async function exportToPDF() {
             const { jsPDF } = window.jspdf;
-            const header = document.getElementById('pdfHeader');
-            const footer = document.getElementById('pdfFooter');
+            const pdfHeader = document.getElementById('pdfHeaderSection');
+            const uiHeader = document.getElementById('uiHeader');
+            const targetGroup = document.getElementById('activeGroupDisplay').innerText;
             
-            document.getElementById('currentDate').innerText = new Date().toLocaleDateString('uz-UZ');
-            header.classList.remove('hidden');
-            footer.classList.remove('hidden');
+            document.getElementById('pdfDateDisplay').innerText = "Sana: " + new Date().toLocaleDateString();
+            document.getElementById('pdfGroupDisplay').innerText = targetGroup + " GURUHI";
+            document.getElementById('pdfWeekLabel').innerText = (state.currentWeekIdx + 1) + "-HAFTA JADVALI";
             
-            const usedTeachers = new Set();
-            Object.values(appData.schedule).forEach(s => usedTeachers.add(s.teacher));
-            document.getElementById('teacherListFooter').innerHTML = Array.from(usedTeachers).map(t => `<li>• ${t}</li>`).join('');
-
-            const element = document.getElementById('printableArea');
+            pdfHeader.style.display = 'block';
+            uiHeader.style.display = 'none';
             
             try {
-                const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-                const imgData = canvas.toDataURL('image/png');
+                const canvas = await html2canvas(document.getElementById('printableArea'), { scale: 3 });
                 const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`Jadval_${document.getElementById('activeGroupDisplay').innerText}_S${document.getElementById('activeSemesterFilter').value}.pdf`);
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 210, (canvas.height * 210) / canvas.width);
+                pdf.save(`${targetGroup}_W${state.currentWeekIdx + 1}.pdf`);
             } finally {
-                header.classList.add('hidden');
-                footer.classList.add('hidden');
+                pdfHeader.style.display = 'none';
+                uiHeader.style.display = 'flex';
             }
         }
-
-        // Init
-        updateDropdowns();
-        initDaySettings();
-        renderSchedule();
     </script>
 </body>
 </html>
