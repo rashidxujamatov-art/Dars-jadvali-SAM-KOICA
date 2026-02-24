@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Group {
+  id               Int             @id @default(autoincrement())
+  name             String
+  weekly_limit_min Int             @default(36)
+  weekly_limit_max Int             @default(40)
+  daily_limit_min  Int             @default(6)
+  daily_limit_max  Int             @default(8)
+  subjects         Subject[]
+  scheduleEntries  ScheduleEntry[]
+}
+
+model Teacher {
+  id               Int             @id @default(autoincrement())
+  first_name       String
+  last_name        String
+  department       String
+  max_daily_hours  Int             @default(8)
+  max_weekly_hours Int             @default(40)
+  subjects         Subject[]
+  scheduleEntries  ScheduleEntry[]
+}
+
+model Subject {
+  id          Int      @id @default(autoincrement())
+  name        String
+  type        SubjectType
+  total_hours Int
+  weekly_hours Int
+  priority    Int
+  semester    Int
+  department  String
+  group_id    Int
+  teacher_id  Int
+  group       Group    @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  teacher     Teacher  @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  scheduleEntries ScheduleEntry[]
+}
+
+model TimeSlot {
+  id          Int @id @default(autoincrement())
+  day         Int
+  pair_number Int
+}
+
+model ScheduleEntry {
+  id          Int      @id @default(autoincrement())
+  group_id    Int
+  teacher_id  Int
+  subject_id  Int
+  day         Int
+  pair_start  Int
+  pair_length Int
+  week_number Int
+  group       Group    @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  teacher     Teacher  @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  subject     Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model BlockedDay {
+  id        Int @id @default(autoincrement())
+  day       Int @unique
+  max_pairs Int
+}
+
+model Holiday {
+  id          Int      @id @default(autoincrement())
+  date        String
+  week_number Int
+  day         Int
+}
+
+enum SubjectType {
+  PRACTICAL
+  THEORY
+}
