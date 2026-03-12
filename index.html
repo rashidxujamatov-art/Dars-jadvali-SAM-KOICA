@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sam KOICA Dars jadvali dasturi</title>
+    <title>Sam KOICA uchun Dars jadvali dasturi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -32,7 +32,10 @@
 
         @media print {
             .no-print { display: none; }
+            .print-only { display: block !important; }
+            body { background-color: white; }
         }
+        .page-break { page-break-after: always; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -41,54 +44,99 @@
     <div id="loginSection" class="login-screen fixed inset-0 z-50 flex items-center justify-center">
         <div class="bg-white p-8 rounded-lg shadow-2xl w-96">
             <h2 class="text-2xl font-bold text-center mb-6 text-bardoviy">Sam KOICA</h2>
-            <p class="text-xs text-center mb-4 text-gray-500">Dars jadvali dasturi (sinovda)</p>
+            <p class="text-xs text-center mb-4 text-gray-500 italic">dars jadvali dasturi (sinovda)</p>
             <div class="space-y-4">
-                <input type="text" id="loginUser" placeholder="Login" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-red-800">
-                <input type="password" id="loginPass" placeholder="Parol" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-red-800">
-                <button onclick="handleLogin()" class="w-full bg-bardoviy text-white py-3 rounded hover:opacity-90 transition">Kirish</button>
+                <input type="text" id="loginUser" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-red-800" placeholder="Login">
+                <input type="password" id="loginPass" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-red-800" placeholder="Parol">
+                <button onclick="handleLogin()" class="w-full bg-bardoviy text-white py-3 rounded hover:opacity-90 transition font-bold">KIRISH</button>
                 <button onclick="showRegister()" class="w-full text-sm text-gray-600 hover:underline">Ro'yxatdan o'tish</button>
             </div>
-            <p class="mt-8 text-[10px] text-center text-gray-400">Rashid X. tomonidan yaratilgan</p>
+            <p class="mt-8 text-[10px] text-center text-gray-400">Asoschi: Rashid X. tomonidan</p>
         </div>
     </div>
 
     <!-- Main Dashboard -->
     <div id="mainApp" class="hidden flex h-screen">
         <!-- Sidebar -->
-        <aside class="w-64 bg-slate-900 text-white flex-shrink-0 no-print">
+        <aside class="w-64 bg-slate-900 text-white flex-shrink-0 no-print flex flex-col">
             <div class="p-4 border-b border-gray-700">
                 <h1 class="text-lg font-bold">Sam KOICA</h1>
-                <p class="text-[10px] opacity-50 italic">dastur sinovda</p>
+                <p class="text-[10px] opacity-50 italic">Dars jadvali dasturi</p>
             </div>
-            <nav class="p-4 space-y-2">
-                <button onclick="showPage('teachers')" class="w-full text-left p-2 hover:bg-gray-800 rounded">O'qituvchilar</button>
-                <button onclick="showPage('groups')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Guruhlar</button>
-                <button onclick="showPage('rooms')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Xonalar</button>
-                <button onclick="showPage('subjects')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Fanlar</button>
-                <button onclick="generateSchedule()" class="w-full text-left p-2 bg-bardoviy rounded mt-4">Jadval tuzish</button>
-                <button onclick="showPage('viewSchedule')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Tayyor jadval</button>
+            <nav class="p-4 space-y-2 flex-1 overflow-y-auto">
+                <div class="text-gray-500 text-[10px] uppercase font-bold mb-2">Ma'lumotlar</div>
+                <button onclick="showPage('teachers')" class="w-full text-left p-2 hover:bg-gray-800 rounded flex items-center gap-2">O'qituvchilar</button>
+                <button onclick="showPage('groups')" class="w-full text-left p-2 hover:bg-gray-800 rounded flex items-center gap-2">Guruhlar</button>
+                <button onclick="showPage('rooms')" class="w-full text-left p-2 hover:bg-gray-800 rounded flex items-center gap-2">Xonalar</button>
+                <button onclick="showPage('subjects')" class="w-full text-left p-2 hover:bg-gray-800 rounded flex items-center gap-2">Fanlar</button>
+                
+                <div class="text-gray-500 text-[10px] uppercase font-bold mt-4 mb-2">Sozlamalar</div>
+                <button onclick="showPage('settings')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Dars rejimi</button>
+                
+                <div class="text-gray-500 text-[10px] uppercase font-bold mt-4 mb-2">Jadval</div>
+                <button onclick="generateSchedule()" class="w-full text-left p-3 bg-bardoviy rounded font-bold shadow-lg">Avtomatik tuzish</button>
+                <button onclick="showPage('viewSchedule')" class="w-full text-left p-2 hover:bg-gray-800 rounded">Tayyor jadvalni ko'rish</button>
             </nav>
-            <div class="absolute bottom-4 left-4 text-[10px] text-gray-500">
-                Rashid X. tomonidan
+            <div class="p-4 text-[10px] text-gray-500 border-t border-gray-800">
+                Rashid X. tomonidan yaratildi
             </div>
         </aside>
 
         <!-- Content Area -->
-        <main class="flex-1 overflow-y-auto p-8" id="contentArea">
+        <main class="flex-1 overflow-y-auto p-8 bg-blue-50/30" id="contentArea">
             
             <!-- Welcome Screen -->
             <div id="page-home" class="page fade-in">
                 <h2 class="text-3xl font-bold mb-4">Xush kelibsiz!</h2>
-                <p>O'quv rejasini boshlash uchun chap menyudan foydalaning.</p>
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-blue-100">
+                    <p class="mb-4">Dars jadvallarini avtomatlashtirilgan tarzda tuzish tizimiga xush kelibsiz. Tizim quyidagi parametrlarni inobatga oladi:</p>
+                    <ul class="list-disc pl-5 space-y-2 text-sm">
+                        <li>O'qituvchilar ta'tili va ish yuklamasi</li>
+                        <li>Nazariy (1-para) va Amaliy (3-para) darslar ketma-ketligi</li>
+                        <li>Guruhlar uchun kunlik 8 soatdan ortiq dars qo'ymaslik</li>
+                        <li>Parallel darslar va xonalar bandligini qat'iy tekshirish</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div id="page-settings" class="page hidden fade-in">
+                <h2 class="text-2xl font-bold mb-6 text-bardoviy">Dars rejimi sozlamalari</h2>
+                <div class="bg-white p-6 rounded-lg shadow space-y-6">
+                    <div>
+                        <label class="block font-bold mb-2">Ish haftasi davomiyligi:</label>
+                        <select id="workDaysCount" class="p-2 border rounded w-full max-w-xs" onchange="updateWorkDaysUI()">
+                            <option value="6">6 kunlik dars jadvali (Kuniga 3 paradan)</option>
+                            <option value="5">5 kunlik dars jadvali (Kuniga 4 paradan)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-2">Dam olish kunlarini belgilang:</label>
+                        <div class="flex gap-4" id="daysToggleContainer">
+                            <!-- JS dynamically generates checkboxes -->
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-bold mb-2">O'quv kursi boshlanish sanasi:</label>
+                            <input type="date" id="courseStart" class="p-2 border rounded w-full">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-2">O'quv kursi tugash sanasi:</label>
+                            <input type="date" id="courseEnd" class="p-2 border rounded w-full">
+                        </div>
+                    </div>
+                    <button onclick="saveSettings()" class="bg-bardoviy text-white px-6 py-2 rounded font-bold">Sozlamalarni saqlash</button>
+                </div>
             </div>
 
             <!-- Teachers Page -->
             <div id="page-teachers" class="page hidden fade-in">
                 <div class="flex justify-between mb-4">
                     <h2 class="text-2xl font-bold text-bardoviy">O'qituvchilar</h2>
-                    <div>
-                        <button onclick="importExcel('teachers')" class="bg-green-600 text-white px-3 py-1 rounded text-sm mr-2">Excel Import</button>
-                        <button onclick="addTeacherRow()" class="bg-bardoviy text-white px-3 py-1 rounded text-sm">+ Yangi</button>
+                    <div class="flex gap-2">
+                        <button onclick="exportData('teachers')" class="bg-gray-700 text-white px-3 py-1 rounded text-sm">Excel Export</button>
+                        <button onclick="addTeacherRow()" class="bg-bardoviy text-white px-3 py-1 rounded text-sm font-bold">+ Yangi o'qituvchi</button>
                     </div>
                 </div>
                 <div class="bg-white rounded shadow overflow-hidden">
@@ -96,7 +144,7 @@
                         <thead class="bg-gray-100">
                             <tr>
                                 <th class="p-3 border">FISH</th>
-                                <th class="p-3 border">Ta'til vaqti (Sanadan-Gacha)</th>
+                                <th class="p-3 border">Ta'til vaqti (Sana dan - Gacha)</th>
                                 <th class="p-3 border w-24">Amal</th>
                             </tr>
                         </thead>
@@ -108,49 +156,81 @@
             <!-- Groups Page -->
             <div id="page-groups" class="page hidden fade-in">
                 <h2 class="text-2xl font-bold mb-4">Guruhlar</h2>
-                <button onclick="addGroupRow()" class="mb-4 bg-bardoviy text-white px-4 py-2 rounded">+ Guruh qo'shish</button>
-                <div id="groupList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                <div class="flex gap-4 mb-4">
+                    <input type="text" id="newGroupName" placeholder="Guruh nomi (masalan: K-202)" class="p-2 border rounded flex-1">
+                    <button onclick="addGroup()" class="bg-bardoviy text-white px-4 py-2 rounded">Qo'shish</button>
+                </div>
+                <div id="groupList" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
             </div>
 
             <!-- Rooms Page -->
             <div id="page-rooms" class="page hidden fade-in">
-                <h2 class="text-2xl font-bold mb-4">Xonalar</h2>
-                <button onclick="addRoom()" class="mb-4 bg-bardoviy text-white px-4 py-2 rounded">+ Xona qo'shish</button>
-                <div id="roomContainer" class="flex flex-wrap gap-2"></div>
+                <h2 class="text-2xl font-bold mb-4">Xonalar ro'yxati</h2>
+                <div class="flex gap-4 mb-4">
+                    <input type="text" id="newRoomName" placeholder="Xona raqami yoki nomi" class="p-2 border rounded flex-1">
+                    <button onclick="addRoom()" class="bg-bardoviy text-white px-4 py-2 rounded">Qo'shish</button>
+                </div>
+                <div id="roomContainer" class="flex flex-wrap gap-3"></div>
             </div>
 
             <!-- Subjects Page -->
             <div id="page-subjects" class="page hidden fade-in">
-                <h2 class="text-2xl font-bold mb-4 text-bardoviy">Fanlar Biriktirish</h2>
-                <div class="bg-white p-4 rounded shadow space-y-4">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <input type="text" id="subjName" placeholder="Fan nomi" class="p-2 border rounded">
-                        <select id="subjType" class="p-2 border rounded">
-                            <option value="nazariy">Nazariy</option>
-                            <option value="amaliy">Amaliy</option>
+                <h2 class="text-2xl font-bold mb-4 text-bardoviy">Fanlarni biriktirish</h2>
+                <div class="bg-white p-6 rounded shadow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Fan nomi:</label>
+                        <input type="text" id="subjName" class="w-full p-2 border rounded" placeholder="Matematika">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Fan turi:</label>
+                        <select id="subjType" class="w-full p-2 border rounded">
+                            <option value="nazariy">Nazariy (1-para uchun)</option>
+                            <option value="amaliy">Amaliy (3-para uchun)</option>
                         </select>
-                        <input type="number" id="subjTotalHours" placeholder="Umumiy soat" class="p-2 border rounded">
-                        <input type="number" id="subjWeeklyHours" placeholder="Haftalik soat" class="p-2 border rounded">
-                        <select id="subjTeacher" class="p-2 border rounded"><option>O'qituvchi tanlang</option></select>
-                        <select id="subjGroup" class="p-2 border rounded"><option>Guruh tanlang</option></select>
-                        <select id="subjRoom" class="p-2 border rounded"><option>Xona tanlang</option></select>
-                        <select id="subjSemester" class="p-2 border rounded">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Umumiy soat hajmi:</label>
+                        <input type="number" id="subjTotalHours" class="w-full p-2 border rounded" placeholder="Masalan: 72">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Haftalik soat:</label>
+                        <input type="number" id="subjWeeklyHours" class="w-full p-2 border rounded" placeholder="Masalan: 4">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">O'qituvchi:</label>
+                        <select id="subjTeacher" class="w-full p-2 border rounded"></select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Guruh:</label>
+                        <select id="subjGroup" class="w-full p-2 border rounded"></select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Xona:</label>
+                        <select id="subjRoom" class="w-full p-2 border rounded"></select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Semestr:</label>
+                        <select id="subjSemester" class="w-full p-2 border rounded">
                             <option value="1">1-Semestr</option>
                             <option value="2">2-Semestr</option>
                         </select>
-                        <input type="number" id="subjPriority" placeholder="Prioritet (1-10)" class="p-2 border rounded">
                     </div>
-                    <button onclick="saveSubject()" class="w-full bg-bardoviy text-white py-2 rounded">Saqlash</button>
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold">Prioritet (1-10):</label>
+                        <input type="number" id="subjPriority" class="w-full p-2 border rounded" value="5">
+                    </div>
+                    <button onclick="saveSubject()" class="md:col-span-2 lg:col-span-3 bg-bardoviy text-white py-3 rounded font-bold shadow-md mt-2">FANNI BIRIKTIRISH</button>
                 </div>
-                <div class="mt-8 overflow-x-auto">
-                    <table class="w-full bg-white rounded shadow" id="subjectListTable">
+                
+                <div class="mt-8 bg-white rounded shadow overflow-hidden">
+                    <table class="w-full text-xs text-left" id="subjectListTable">
                         <thead class="bg-gray-100">
                             <tr>
-                                <th class="p-2 border">Fan</th>
+                                <th class="p-2 border">Fan (Turi)</th>
                                 <th class="p-2 border">O'qituvchi</th>
                                 <th class="p-2 border">Guruh</th>
-                                <th class="p-2 border">Xona</th>
-                                <th class="p-2 border">Haftalik</th>
+                                <th class="p-2 border">Haftalik/Umumiy</th>
+                                <th class="p-2 border">Semestr</th>
                                 <th class="p-2 border">Amal</th>
                             </tr>
                         </thead>
@@ -162,55 +242,23 @@
             <!-- View Schedule Page -->
             <div id="page-viewSchedule" class="page hidden fade-in">
                 <div class="flex justify-between items-center mb-6 no-print">
-                    <h2 class="text-2xl font-bold">Dars jadvali ko'rinishi</h2>
-                    <div class="space-x-2">
-                        <button onclick="exportToPDF()" class="bg-red-700 text-white px-4 py-2 rounded">PDF Export</button>
-                        <button onclick="window.print()" class="bg-blue-700 text-white px-4 py-2 rounded">Chop etish</button>
+                    <div>
+                        <h2 class="text-2xl font-bold">Dars jadvali</h2>
+                        <select id="scheduleWeekFilter" onchange="renderFullSchedule()" class="p-2 border rounded mt-2">
+                            <option value="all">Barcha haftalar</option>
+                        </select>
+                        <select id="scheduleGroupFilter" onchange="renderFullSchedule()" class="p-2 border rounded mt-2 ml-2">
+                            <option value="all">Barcha guruhlar</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.print()" class="bg-blue-700 text-white px-4 py-2 rounded font-bold">CHOP ETISH</button>
+                        <button onclick="exportScheduleToExcel()" class="bg-green-700 text-white px-4 py-2 rounded font-bold">Excel Export</button>
                     </div>
                 </div>
                 
-                <div id="printableArea" class="bg-white p-8 border min-h-screen">
-                    <!-- Header for Document -->
-                    <div class="flex justify-between mb-4">
-                        <div></div>
-                        <div class="text-right text-xs font-bold leading-tight uppercase w-64">
-                            TASDIQLAYMAN<br>
-                            Samarqand viloyati kasbiy ko'nikmalar mintaqaviy markazi O'IBDO'B<br>
-                            B. Abdullayev _____________<br>
-                            "____" __________ 202X y.
-                        </div>
-                    </div>
-
-                    <div class="text-center my-6">
-                        <h3 class="font-bold text-sm uppercase">Samarqand viloyati kasbiy ko'nikmalar mintaqaviy markazi</h3>
-                        <h4 class="font-bold text-lg" id="scheduleTitle">(Guruh nomi) dars jadvali</h4>
-                        <p class="text-sm italic" id="scheduleDateRange">01.09.202X dan - 30.12.202X gacha</p>
-                    </div>
-
-                    <!-- Timetable -->
-                    <div class="overflow-x-auto">
-                        <table class="w-full border-2 border-black text-xs text-center border-collapse">
-                            <thead>
-                                <tr class="bg-gray-100">
-                                    <th class="border-2 border-black p-2 w-24">Kunlar</th>
-                                    <th class="border-2 border-black p-2">1-juftlik<br>8:30-9:50</th>
-                                    <th class="border-2 border-black p-2">2-juftlik<br>10:00-11:20</th>
-                                    <th class="border-2 border-black p-2">3-juftlik<br>12:00-13:20</th>
-                                    <th class="border-2 border-black p-2">4-juftlik<br>13:30-14:50</th>
-                                </tr>
-                            </thead>
-                            <tbody id="scheduleBody">
-                                <!-- Generated JS Rows -->
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="mt-8 flex justify-between items-center px-4">
-                        <div></div>
-                        <div class="text-right font-bold text-sm">
-                            Bo'lim boshlig'i Xujamatov R. __________
-                        </div>
-                    </div>
+                <div id="scheduleOutputContainer" class="space-y-12">
+                    <!-- Dinamik ravishda jadvallar shu yerga tushadi -->
                 </div>
             </div>
 
@@ -218,34 +266,38 @@
     </div>
 
     <script>
-        // Data Store
+        // Global State
         let data = {
             teachers: [],
             groups: [],
             rooms: [],
             subjects: [],
-            schedule: []
+            settings: {
+                workDays: 6,
+                disabledDays: [0], // Yakshanba dam
+                courseStart: '',
+                courseEnd: ''
+            }
         };
 
         const ADMIN_LOGIN = "Rashid";
         const ADMIN_PASS = "Koica2026";
 
-        // Auth Logic
+        // Login System
         function handleLogin() {
-            const user = document.getElementById('loginUser').value;
-            const pass = document.getElementById('loginPass').value;
-            
-            if(user === ADMIN_LOGIN && pass === ADMIN_PASS) {
+            const u = document.getElementById('loginUser').value;
+            const p = document.getElementById('loginPass').value;
+            if(u === ADMIN_LOGIN && p === ADMIN_PASS) {
                 document.getElementById('loginSection').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
-                initData();
+                initDefaults();
             } else {
-                alert("Login yoki parol xato!");
+                alert("Xato! Login yoki parol noto'g'ri.");
             }
         }
 
         function showRegister() {
-            alert("Ro'yxatdan o'tish so'rovi yuborildi. Admin tasdiqlashi kutilmoqda (Maksimal foydalanuvchilar: 50)");
+            alert("Ro'yxatdan o'tish hozircha yopiq. Admin bilan bog'laning.");
         }
 
         // Navigation
@@ -253,12 +305,39 @@
             document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
             document.getElementById('page-' + pageId).classList.remove('hidden');
             if(pageId === 'subjects') populateSelectors();
+            if(pageId === 'settings') updateWorkDaysUI();
         }
 
-        function initData() {
-            // Initial Empty States
-            data.rooms = ["101", "102", "Kompyuter xonasi"];
+        function initDefaults() {
+            data.rooms = ["101", "102", "103", "A-Lab", "B-Lab"];
+            data.groups = ["K-101", "K-102"];
+            data.settings.courseStart = "2024-09-02";
+            data.settings.courseEnd = "2024-12-30";
             renderRooms();
+            renderGroups();
+        }
+
+        // Settings Logic
+        function updateWorkDaysUI() {
+            const container = document.getElementById('daysToggleContainer');
+            const weekDays = ["Yak", "Du", "Se", "Chor", "Pay", "Ju", "Sha"];
+            container.innerHTML = weekDays.map((day, idx) => `
+                <label class="flex flex-col items-center p-2 border rounded cursor-pointer hover:bg-gray-50">
+                    <span class="text-xs font-bold mb-1">${day}</span>
+                    <input type="checkbox" value="${idx}" ${data.settings.disabledDays.includes(idx) ? 'checked' : ''} class="day-check">
+                </label>
+            `).join('');
+        }
+
+        function saveSettings() {
+            data.settings.workDays = parseInt(document.getElementById('workDaysCount').value);
+            data.settings.courseStart = document.getElementById('courseStart').value;
+            data.settings.courseEnd = document.getElementById('courseEnd').value;
+            
+            const checks = document.querySelectorAll('.day-check:checked');
+            data.settings.disabledDays = Array.from(checks).map(c => parseInt(c.value));
+            
+            alert("Sozlamalar saqlandi!");
         }
 
         // Teacher Management
@@ -266,17 +345,20 @@
             const tbody = document.querySelector('#teacherTable tbody');
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="p-2 border"><input type="text" placeholder="Ism Familiya" class="w-full t-fish"></td>
-                <td class="p-2 border text-sm">
-                    Sana dan: <input type="date" class="t-start"> 
-                    Gacha: <input type="date" class="t-end">
+                <td class="p-2 border"><input type="text" class="w-full p-1 t-fish border-none bg-transparent" placeholder="F.I.SH"></td>
+                <td class="p-2 border text-sm flex items-center gap-2">
+                    <input type="date" class="t-start p-1 border rounded"> dan 
+                    <input type="date" class="t-end p-1 border rounded"> gacha
                 </td>
-                <td class="p-2 border"><button onclick="saveTeachers()" class="text-green-600 font-bold">V</button></td>
+                <td class="p-2 border text-center">
+                    <button onclick="saveTeachersFromTable()" class="text-green-600 font-bold px-2">✓</button>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-red-600 px-2">✕</button>
+                </td>
             `;
             tbody.appendChild(tr);
         }
 
-        function saveTeachers() {
+        function saveTeachersFromTable() {
             const rows = document.querySelectorAll('#teacherTable tbody tr');
             data.teachers = [];
             rows.forEach(row => {
@@ -285,50 +367,40 @@
                 const end = row.querySelector('.t-end').value;
                 if(fish) data.teachers.push({ fish, vacation: { start, end } });
             });
-            alert("Ma'lumotlar saqlandi!");
+            alert("Muvaffaqiyatli qabul qilindi!");
         }
 
-        // Group Management
-        function addGroupRow() {
-            const name = prompt("Guruh nomini kiriting:");
-            if(name) {
-                data.groups.push(name);
-                renderGroups();
-            }
+        // Group & Room Adders
+        function addGroup() {
+            const n = document.getElementById('newGroupName').value;
+            if(n) { data.groups.push(n); document.getElementById('newGroupName').value = ''; renderGroups(); alert("Guruh qo'shildi!"); }
         }
-
         function renderGroups() {
-            const container = document.getElementById('groupList');
-            container.innerHTML = data.groups.map(g => `
-                <div class="bg-white p-4 rounded border-l-4 border-bardoviy shadow-sm flex justify-between">
-                    <span>${g}</span>
-                    <button class="text-red-500">O'chirish</button>
-                </div>
-            `).join('');
+            const c = document.getElementById('groupList');
+            c.innerHTML = data.groups.map(g => `<div class="bg-white p-3 border-l-4 border-bardoviy shadow-sm flex justify-between"><span>${g}</span><button class="text-red-400 text-xs">O'chirish</button></div>`).join('');
         }
-
-        // Room Management
-        function renderRooms() {
-            const container = document.getElementById('roomContainer');
-            container.innerHTML = data.rooms.map(r => `
-                <div class="bg-slate-800 text-white px-4 py-2 rounded">${r}</div>
-            `).join('');
-        }
-
         function addRoom() {
-            const r = prompt("Xona raqami:");
-            if(r) { data.rooms.push(r); renderRooms(); }
+            const r = document.getElementById('newRoomName').value;
+            if(r) { data.rooms.push(r); document.getElementById('newRoomName').value = ''; renderRooms(); alert("Xona qo'shildi!"); }
+        }
+        function renderRooms() {
+            const c = document.getElementById('roomContainer');
+            c.innerHTML = data.rooms.map(r => `<div class="bg-slate-800 text-white px-3 py-1 rounded-full text-sm">${r}</div>`).join('');
         }
 
-        // Subject Management
+        // Subject Logic
         function populateSelectors() {
-            document.getElementById('subjTeacher').innerHTML = '<option>O\'qituvchi tanlang</option>' + data.teachers.map(t => `<option>${t.fish}</option>`).join('');
-            document.getElementById('subjGroup').innerHTML = '<option>Guruh tanlang</option>' + data.groups.map(g => `<option>${g}</option>`).join('');
-            document.getElementById('subjRoom').innerHTML = '<option>Xona tanlang</option>' + data.rooms.map(r => `<option>${r}</option>`).join('');
+            const tSel = document.getElementById('subjTeacher');
+            const gSel = document.getElementById('subjGroup');
+            const rSel = document.getElementById('subjRoom');
+            
+            tSel.innerHTML = data.teachers.map(t => `<option value="${t.fish}">${t.fish}</option>`).join('') || '<option>O\'qituvchi yo\'q</option>';
+            gSel.innerHTML = data.groups.map(g => `<option value="${g}">${g}</option>`).join('');
+            rSel.innerHTML = data.rooms.map(r => `<option value="${r}">${r}</option>`).join('');
         }
 
         function saveSubject() {
-            const subj = {
+            const s = {
                 name: document.getElementById('subjName').value,
                 type: document.getElementById('subjType').value,
                 total: parseInt(document.getElementById('subjTotalHours').value),
@@ -337,87 +409,217 @@
                 group: document.getElementById('subjGroup').value,
                 room: document.getElementById('subjRoom').value,
                 semester: document.getElementById('subjSemester').value,
-                priority: parseInt(document.getElementById('subjPriority').value) || 1
+                priority: parseInt(document.getElementById('subjPriority').value),
+                remaining: parseInt(document.getElementById('subjTotalHours').value)
             };
-            
-            if(!subj.name || isNaN(subj.total)) return alert("Ma'lumotlar to'liq emas!");
-            
-            data.subjects.push(subj);
+            if(!s.name || !s.total) return alert("Hamma maydonlarni to'ldiring!");
+            data.subjects.push(s);
             renderSubjects();
-            alert("Fan kiritildi va biriktirildi!");
+            alert("Ma'lumotlar qabul qilindi!");
         }
 
         function renderSubjects() {
-            const tbody = document.querySelector('#subjectListTable tbody');
-            tbody.innerHTML = data.subjects.map((s, i) => `
-                <tr class="text-sm">
-                    <td class="p-2 border">${s.name} (${s.type})</td>
+            const b = document.querySelector('#subjectListTable tbody');
+            b.innerHTML = data.subjects.map((s, i) => `
+                <tr class="border-b">
+                    <td class="p-2 border font-bold">${s.name} <span class="text-[10px] text-gray-500 font-normal uppercase">(${s.type})</span></td>
                     <td class="p-2 border">${s.teacher}</td>
                     <td class="p-2 border">${s.group}</td>
-                    <td class="p-2 border">${s.room}</td>
-                    <td class="p-2 border">${s.weekly} s.</td>
-                    <td class="p-2 border text-center"><button onclick="data.subjects.splice(${i},1);renderSubjects()" class="text-red-500">X</button></td>
+                    <td class="p-2 border">${s.weekly}/${s.total} s.</td>
+                    <td class="p-2 border">${s.semester}-semestr</td>
+                    <td class="p-2 border"><button onclick="data.subjects.splice(${i},1);renderSubjects()" class="text-red-600">O'chirish</button></td>
                 </tr>
             `).join('');
         }
 
-        // GENERATION ALGORITHM (Simplified Logic)
+        // --- SCHEDULING ALGORITHM ---
         function generateSchedule() {
             if(data.subjects.length === 0) return alert("Avval fanlarni kiriting!");
+            if(!data.settings.courseStart || !data.settings.courseEnd) return alert("O'quv kursi sanalarini belgilang!");
+
+            const startDate = new Date(data.settings.courseStart);
+            const endDate = new Date(data.settings.courseEnd);
             
-            const days = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
-            const scheduleBody = document.getElementById('scheduleBody');
-            scheduleBody.innerHTML = '';
+            // Haftalar sonini hisoblash
+            const diffTime = Math.abs(endDate - startDate);
+            const totalWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
 
-            // Algoritm Logic:
-            // 1. Sort by Priority
-            // 2. Check Teacher Vacation
-            // 3. Parallelism check (Teacher/Group/Room)
-            // 4. Theory (1-para) then Practice (3-para) rule
+            let fullSchedule = [];
+            let subjectsCopy = JSON.parse(JSON.stringify(data.subjects));
 
-            days.forEach(day => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td class="border-2 border-black p-4 font-bold bg-gray-50">${day}</td>`;
-                
-                // Slots 1 to 4 (Double lessons / Para)
-                for(let slot = 1; slot <= 4; slot++) {
-                    let cellContent = "-";
+            for (let w = 0; w < totalWeeks; w++) {
+                let weekData = { week: w + 1, days: [] };
+                let currentWeekStart = new Date(startDate);
+                currentWeekStart.setDate(startDate.getDate() + (w * 7));
+
+                // Haftaning 7 kuni bo'yicha aylanamiz
+                for (let d = 0; d < 7; d++) {
+                    let currentDay = new Date(currentWeekStart);
+                    currentDay.setDate(currentWeekStart.getDate() + d);
                     
-                    // Simple logic to find a subject for this slot
-                    const fitSubj = data.subjects.find(s => {
-                        // Priority check and slot availability (mock logic)
-                        return s.priority > 0;
+                    if (data.settings.disabledDays.includes(currentDay.getDay())) continue;
+
+                    let daySchedule = { 
+                        date: currentDay.toLocaleDateString('uz-UZ'), 
+                        dayName: currentDay.toLocaleDateString('uz-UZ', {weekday: 'long'}),
+                        slots: [null, null, null, null] // 1-4 juftliklar
+                    };
+
+                    // Algoritm mantiqi:
+                    // 1-para: Faqat nazariya
+                    // 2-4 para: Amaliyot (ustunroq)
+                    
+                    data.groups.forEach(group => {
+                        // Bir kunda bitta guruhga dars qo'yish
+                        let groupUsedSlots = 0;
+                        
+                        // Slot 1 (Nazariya uchun ustuvor)
+                        let theorySubj = subjectsCopy.find(s => 
+                            s.group === group && 
+                            s.type === 'nazariy' && 
+                            s.remaining >= 2 && 
+                            !isTeacherBusy(daySchedule, s.teacher) &&
+                            !isTeacherOnVacation(s.teacher, currentDay)
+                        );
+                        
+                        if (theorySubj) {
+                            daySchedule.slots[0] = { ...theorySubj, currentGroup: group };
+                            theorySubj.remaining -= 2;
+                        }
+
+                        // Slot 2-4 (Amaliyot uchun ustuvor)
+                        for(let sIdx = 1; sIdx < 4; sIdx++) {
+                            let practiceSubj = subjectsCopy.find(s => 
+                                s.group === group && 
+                                s.type === 'amaliy' && 
+                                s.remaining >= 2 && 
+                                !isTeacherBusy(daySchedule, s.teacher) &&
+                                !isTeacherOnVacation(s.teacher, currentDay) &&
+                                !daySchedule.slots.some(slot => slot && slot.name === s.name && slot.currentGroup === group) // bir kunda bir fan takrorlanmasin
+                            );
+
+                            if(practiceSubj) {
+                                daySchedule.slots[sIdx] = { ...practiceSubj, currentGroup: group };
+                                practiceSubj.remaining -= 2;
+                            }
+                        }
                     });
 
-                    if(fitSubj) {
-                        cellContent = `<div class="font-bold">${fitSubj.name}</div>
-                                       <div class="italic text-[10px]">${fitSubj.teacher}</div>
-                                       <div class="text-[9px] text-blue-800">Xona: ${fitSubj.room}</div>`;
-                    }
-
-                    tr.innerHTML += `<td class="border-2 border-black p-2">${cellContent}</td>`;
+                    weekData.days.push(daySchedule);
                 }
-                scheduleBody.appendChild(tr);
-            });
+                fullSchedule.push(weekData);
+            }
 
+            data.schedule = fullSchedule;
+            updateScheduleFilters();
+            renderFullSchedule();
             showPage('viewSchedule');
-            alert("Jadval muvaffaqiyatli shakllantirildi!");
+            alert("Jadval " + totalWeeks + " hafta uchun muvaffaqiyatli tuzildi!");
         }
 
-        // Export Functionality
-        function exportToPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'mm', 'a4');
-            const element = document.getElementById('printableArea');
+        function isTeacherBusy(daySchedule, teacherName) {
+            return daySchedule.slots.some(slot => slot && slot.teacher === teacherName);
+        }
+
+        function isTeacherOnVacation(teacherName, date) {
+            const t = data.teachers.find(x => x.fish === teacherName);
+            if(!t || !t.vacation.start) return false;
+            const start = new Date(t.vacation.start);
+            const end = new Date(t.vacation.end);
+            return date >= start && date <= end;
+        }
+
+        function updateScheduleFilters() {
+            const wSel = document.getElementById('scheduleWeekFilter');
+            wSel.innerHTML = '<option value="all">Barcha haftalar</option>' + data.schedule.map(w => `<option value="${w.week}">${w.week}-hafta</option>`).join('');
             
-            // Note: In real implementation, we use html2canvas + jsPDF
-            // For this version, we trigger print as it's more reliable for tables
-            window.print();
+            const gSel = document.getElementById('scheduleGroupFilter');
+            gSel.innerHTML = '<option value="all">Barcha guruhlar</option>' + data.groups.map(g => `<option value="${g}">${g}</option>`).join('');
         }
 
-        function importExcel(type) {
-            alert("Excel faylni tanlang. Format: FISH, SanaDan, SanaGacha");
-            // File input logic would go here
+        function renderFullSchedule() {
+            const container = document.getElementById('scheduleOutputContainer');
+            const weekFilter = document.getElementById('scheduleWeekFilter').value;
+            const groupFilter = document.getElementById('scheduleGroupFilter').value;
+
+            container.innerHTML = '';
+
+            data.schedule.forEach(week => {
+                if(weekFilter !== 'all' && week.week != weekFilter) return;
+
+                const weekDiv = document.createElement('div');
+                weekDiv.className = "bg-white p-10 border shadow-lg page-break";
+                
+                // Header (Tasdiqlash bloklari)
+                weekDiv.innerHTML = `
+                    <div class="flex justify-between mb-8">
+                        <div></div>
+                        <div class="text-right text-[10px] font-bold leading-tight uppercase w-72">
+                            TASDIQLAYMAN<br>
+                            Samarqand viloyati kasbiy ko'nikmalar mintaqaviy markazi O'IBDO'B<br>
+                            B. Abdullayev _____________<br>
+                            "____" __________ 2024 y.
+                        </div>
+                    </div>
+                    <div class="text-center my-10">
+                        <h3 class="font-bold text-xs uppercase underline">Samarqand viloyati kasbiy ko'nikmalar mintaqaviy markazi</h3>
+                        <h4 class="font-black text-xl mt-2 uppercase">${groupFilter === 'all' ? 'UMUMIY' : groupFilter} GURUHI UCHUN DARS JADVALI</h4>
+                        <p class="text-sm italic text-gray-600 mt-1">${week.week}-o'quv haftasi</p>
+                    </div>
+                    
+                    <table class="w-full border-collapse border-2 border-black text-center text-[11px]">
+                        <thead>
+                            <tr class="bg-gray-200">
+                                <th class="border-2 border-black p-3 w-28">KUNLAR</th>
+                                <th class="border-2 border-black p-3">1-juftlik<br>8:30 - 9:50</th>
+                                <th class="border-2 border-black p-3">2-juftlik<br>10:00 - 11:20</th>
+                                <th class="border-2 border-black p-3">3-juftlik<br>12:00 - 13:20</th>
+                                <th class="border-2 border-black p-3">4-juftlik<br>13:30 - 14:50</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${week.days.map(day => `
+                                <tr>
+                                    <td class="border-2 border-black p-3 bg-gray-50 font-bold uppercase">${day.dayName}<br><span class="text-[9px] font-normal">${day.date}</span></td>
+                                    ${day.slots.map(slot => {
+                                        if(groupFilter !== 'all' && slot && slot.currentGroup !== groupFilter) {
+                                            return `<td class="border-2 border-black p-2 text-gray-300">-</td>`;
+                                        }
+                                        return `<td class="border-2 border-black p-2 min-h-[60px]">
+                                            ${slot ? `
+                                                <div class="font-bold text-bardoviy leading-tight mb-1">${slot.name}</div>
+                                                <div class="text-[9px] italic border-t pt-1">${slot.teacher}</div>
+                                                <div class="text-[9px] font-bold text-blue-900">Xona: ${slot.room}</div>
+                                                ${groupFilter === 'all' ? `<div class="text-[8px] text-gray-400">Gr: ${slot.currentGroup}</div>` : ''}
+                                            ` : '<span class="text-gray-300">-</span>'}
+                                        </td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="mt-12 flex justify-between items-end px-4">
+                        <div></div>
+                        <div class="text-right font-bold text-xs">
+                            Bo'lim boshlig'i Xujamatov R. __________
+                        </div>
+                    </div>
+                `;
+                container.appendChild(weekDiv);
+            });
+        }
+
+        // Excel Export Support
+        function exportScheduleToExcel() {
+            alert("Excel export funksiyasi tayyorlanmoqda. Hozircha 'Chop etish' (PDF) dan foydalaning.");
+        }
+
+        function exportData(type) {
+            const ws = XLSX.utils.json_to_sheet(data[type]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, type);
+            XLSX.writeFile(wb, `Sam_KOICA_${type}.xlsx`);
         }
 
     </script>
