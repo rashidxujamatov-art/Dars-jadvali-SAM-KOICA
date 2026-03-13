@@ -1,603 +1,869 @@
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>sam koica uchun dars jadvali dasturi (sinovda)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- Excel va PDF kutubxonalari -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, addDoc, onSnapshot, 
+  doc, deleteDoc, updateDoc 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
+} from 'firebase/auth';
+import { 
+  Users, BookOpen, MapPin, GraduationCap, Calendar, 
+  Plus, Trash2, Download, LogOut, ShieldCheck, 
+  LayoutDashboard, Clock, FileText, Settings, AlertCircle,
+  BarChart3, Layers, Monitor, Book, Star, UserCircle, Plane,
+  Printer, FileSpreadsheet, Lock, Unlock, ChevronLeft, ChevronRight,
+  TrendingUp, PieChart
+} from 'lucide-react';
 
-    <style>
-        :root {
-            --primary-blue: #3b82f6; /* Ochroq ko'k */
-            --bardoviy: #800000;    /* To'q qizil */
-            --dark-black: #0f172a;  /* To'q qora */
-        }
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .bg-bardoviy { background-color: var(--bardoviy); }
-        .text-bardoviy { color: var(--bardoviy); }
-        .sidebar { background-color: var(--dark-black); }
-        .login-screen { background: linear-gradient(135deg, var(--dark-black) 0%, var(--bardoviy) 100%); }
-        .btn-primary { background-color: var(--primary-blue); color: white; }
-        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        
-        /* Jadval uslubi */
-        .schedule-table th, .schedule-table td { border: 1px solid #e2e8f0; padding: 8px; text-align: center; font-size: 12px; }
-        .theory-cell { background-color: #fee2e2; border-left: 4px solid #ef4444 !important; }
-        .practice-cell { background-color: #dcfce7; border-left: 4px solid #22c55e !important; }
-        
-        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
-        .toast { padding: 12px 24px; border-radius: 8px; color: white; margin-bottom: 8px; animation: slideIn 0.3s ease; }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-    </style>
-</head>
-<body>
+// --- CONFIGURATIONS ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'sam-koica-v2-scheduler-pro';
 
-    <div id="toast-container"></div>
+// External Library Loaders
+const loadJS = (src) => new Promise(r => {
+  const s = document.createElement('script'); s.src = src; s.onload = r; document.head.appendChild(s);
+});
 
-    <!-- Login/Register Section -->
-    <div id="loginSection" class="login-screen fixed inset-0 z-50 flex items-center justify-center">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md mx-4">
-            <div class="text-center mb-6">
-                <h2 class="text-xl font-bold text-gray-800 uppercase tracking-tighter">sam koica uchun dars jadvali dasturi</h2>
-                <p class="text-[10px] text-gray-400 font-bold">(dastur sinovda)</p>
-            </div>
-            
-            <div id="authTabs" class="flex border-b mb-6">
-                <button onclick="toggleAuth('login')" id="tab-login" class="flex-1 py-2 font-bold border-b-2 border-bardoviy text-bardoviy">Kirish</button>
-                <button onclick="toggleAuth('reg')" id="tab-reg" class="flex-1 py-2 font-bold text-gray-400">Ro'yxatdan o'tish</button>
-            </div>
+// --- MAIN APPLICATION ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [data, setData] = useState({
+    teachers: [], groups: [], rooms: [], subjects: [], users: [], blockedSlots: []
+  });
 
-            <div id="loginFields" class="space-y-4">
-                <input type="text" id="loginUser" class="w-full p-3 border rounded-xl" placeholder="Login">
-                <input type="password" id="loginPass" class="w-full p-3 border rounded-xl" placeholder="Parol">
-                <button onclick="window.handleLogin()" class="w-full bg-bardoviy text-white py-3 rounded-xl font-bold hover:bg-red-900 transition-all">KIRISH</button>
-            </div>
+  useEffect(() => {
+    const init = async () => {
+      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js');
+      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+      
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    init();
 
-            <div id="regFields" class="hidden space-y-4">
-                <input type="text" id="regName" class="w-full p-3 border rounded-xl" placeholder="F.I.SH">
-                <input type="text" id="regUser" class="w-full p-3 border rounded-xl" placeholder="Yangi Login">
-                <input type="password" id="regPass" class="w-full p-3 border rounded-xl" placeholder="Yangi Parol">
-                <button onclick="window.handleRegister()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">SO'ROV YUBORISH</button>
-                <p class="text-[10px] text-center text-gray-500">Eslatma: Admin ruxsat bermaguncha tizimga kira olmaysiz.</p>
-            </div>
+    onAuthStateChanged(auth, (u) => {
+      if (u) {
+        const session = localStorage.getItem('sam_koica_session');
+        if (session) setUser(JSON.parse(session));
+      }
+      setLoading(false);
+    });
+  }, []);
 
-            <p class="mt-8 text-[11px] text-center text-gray-400 font-medium">Rashid X. tomonidan</p>
+  useEffect(() => {
+    if (!user) return;
+    const collections = ['teachers', 'groups', 'rooms', 'subjects', 'users', 'blockedSlots'];
+    const unsubscribes = collections.map(col => 
+      onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', col), (snap) => {
+        setData(prev => ({
+          ...prev,
+          [col]: snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }));
+      }, (err) => console.error(err))
+    );
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [user]);
+
+  const handleAuth = (type, payload) => {
+    if (type === 'login') {
+      if (payload.user === 'Rashid' && payload.pass === 'Koica2026') {
+        const admin = { uid: 'admin', name: 'Rashid Xujamatov', role: 'admin' };
+        setUser(admin);
+        localStorage.setItem('sam_koica_session', JSON.stringify(admin));
+      } else {
+        const found = data.users.find(u => u.login === payload.user && u.password === payload.pass);
+        if (found) {
+          if (found.status !== 'approved') return alert("Hisob tasdiqlanmagan!");
+          setUser(found);
+          localStorage.setItem('sam_koica_session', JSON.stringify(found));
+        } else alert("Xato!");
+      }
+    } else {
+      addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...payload, status: 'pending', role: 'viewer' });
+      alert("So'rov yuborildi!");
+    }
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 font-black text-blue-600 animate-pulse text-2xl tracking-tighter">SAM KOICA SCHEDULER</div>;
+  if (!user) return <AuthScreen onAuth={handleAuth} />;
+
+  return (
+    <div className="min-h-screen bg-[#f1f5f9] flex">
+      <aside className="w-72 bg-[#0f172a] text-white fixed h-full flex flex-col z-20 shadow-2xl">
+        <div className="p-8 border-b border-slate-800 text-center">
+          <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] mx-auto mb-4 flex items-center justify-center font-black text-xl rotate-3">SK</div>
+          <h1 className="text-sm font-black tracking-[0.3em] uppercase text-blue-400">Sam KOICA</h1>
         </div>
+
+        <nav className="flex-1 p-4 space-y-1 mt-4 overflow-y-auto">
+          {[
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Bosh sahifa' },
+            { id: 'teachers', icon: Users, label: 'O\'qituvchilar' },
+            { id: 'groups', icon: GraduationCap, label: 'Guruhlar' },
+            { id: 'rooms', icon: MapPin, label: 'Xonalar' },
+            { id: 'subjects', icon: BookOpen, label: 'Fanlar Boshqaruvi' },
+            { id: 'schedule', icon: Calendar, label: 'Jadval Tizimi' },
+            ...(user.role === 'admin' ? [{ id: 'admin', icon: ShieldCheck, label: 'Admin Panel' }] : [])
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${
+                activeTab === item.id ? 'bg-blue-600 shadow-xl shadow-blue-600/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              <item.icon size={18} />
+              <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-6 border-t border-slate-800 bg-slate-900/50">
+          <div className="flex items-center gap-3 mb-6 p-3 bg-slate-800 rounded-xl">
+             <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-xs">{user.name[0]}</div>
+             <div className="overflow-hidden">
+                <p className="text-[10px] font-black uppercase truncate">{user.name}</p>
+                <p className="text-[8px] text-slate-500 font-bold uppercase">{user.role}</p>
+             </div>
+          </div>
+          <button onClick={() => {setUser(null); localStorage.removeItem('sam_koica_session');}} className="w-full flex items-center justify-center gap-3 text-slate-500 hover:text-red-400 py-3 rounded-xl border border-slate-800 transition-all text-[10px] font-black uppercase">
+            <LogOut size={16} /> Chiqish
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 ml-72 p-10">
+        {activeTab === 'dashboard' && <DashboardSection data={data} />}
+        {activeTab === 'teachers' && <TeachersSection data={data} db={db} appId={appId} />}
+        {activeTab === 'groups' && <ManagementSection type="groups" list={data.groups} db={db} appId={appId} icon={GraduationCap} />}
+        {activeTab === 'rooms' && <ManagementSection type="rooms" list={data.rooms} db={db} appId={appId} icon={MapPin} />}
+        {activeTab === 'subjects' && <SubjectsSection data={data} db={db} appId={appId} />}
+        {activeTab === 'schedule' && <ScheduleSection data={data} db={db} appId={appId} />}
+        {activeTab === 'admin' && <AdminSection list={data.users} db={db} appId={appId} />}
+      </main>
     </div>
+  );
+}
 
-    <!-- Main App Container -->
-    <div id="mainApp" class="hidden flex flex-col md:flex-row h-screen overflow-hidden">
-        <!-- Sidebar -->
-        <aside class="w-full md:w-64 sidebar text-white flex flex-col">
-            <div class="p-6 border-b border-gray-800 flex flex-col items-center">
-                <i class="fas fa-calendar-check text-3xl text-blue-400 mb-2"></i>
-                <h1 class="text-sm font-bold text-center uppercase">Sam KOICA</h1>
-            </div>
-            
-            <nav class="p-4 flex-1 space-y-1 overflow-y-auto">
-                <button onclick="showPage('dashboard')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-chart-line"></i> Boshqaruv</button>
-                <button onclick="showPage('teachers')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-chalkboard-teacher"></i> O'qituvchilar</button>
-                <button onclick="showPage('groups')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-users"></i> Guruhlar</button>
-                <button onclick="showPage('rooms')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-door-open"></i> Xonalar</button>
-                <button onclick="showPage('subjects')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-book"></i> Fanlar</button>
-                <button onclick="showPage('generator')" class="w-full flex items-center gap-3 p-3 bg-red-900/30 text-red-400 rounded-lg text-sm font-bold"><i class="fas fa-magic"></i> Jadval Tuzish</button>
-                <div id="adminMenu" class="hidden pt-4 border-t border-gray-800 mt-4">
-                    <p class="text-[10px] text-gray-500 uppercase px-3 mb-2">Admin Panel</p>
-                    <button onclick="showPage('users')" class="w-full flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-sm"><i class="fas fa-user-shield"></i> Foydalanuvchilar</button>
+// --- SUB-COMPONENTS ---
+
+function AuthScreen({ onAuth }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [form, setForm] = useState({ user: '', pass: '', name: '' });
+
+  return (
+    <div className="h-screen flex items-center justify-center bg-[#0f172a] p-4 font-sans">
+      <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+        <div className="text-center mb-10">
+          <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center font-black text-3xl shadow-inner">SK</div>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Xush kelibsiz</h2>
+          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-2 italic">Samarkand KOICA Center</p>
+        </div>
+
+        <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl mb-8">
+          <button onClick={() => setIsLogin(true)} className={`flex-1 py-3 rounded-xl font-black text-[10px] tracking-widest ${isLogin ? 'bg-white shadow-lg text-blue-600' : 'text-slate-500'}`}>KIRISH</button>
+          <button onClick={() => setIsLogin(false)} className={`flex-1 py-3 rounded-xl font-black text-[10px] tracking-widest ${!isLogin ? 'bg-white shadow-lg text-blue-600' : 'text-slate-500'}`}>RO'YXATDAN O'TISH</button>
+        </div>
+
+        <div className="space-y-4">
+          {!isLogin && <input type="text" placeholder="FISH" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:ring-2 ring-blue-500/20" onChange={e => setForm({...form, name: e.target.value})} />}
+          <input type="text" placeholder="Login" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:ring-2 ring-blue-500/20" onChange={e => setForm({...form, user: e.target.value})} />
+          <input type="password" placeholder="Parol" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:ring-2 ring-blue-500/20" onChange={e => setForm({...form, pass: e.target.value})} />
+          <button onClick={() => onAuth(isLogin ? 'login' : 'reg', form)} className="w-full py-6 bg-blue-600 text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest shadow-xl shadow-blue-600/30 active:scale-95 transition-all">
+            {isLogin ? 'Tizimga Kirish' : 'So\'rov Yuborish'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const StatCard = ({ label, value, icon: Icon, color }) => (
+  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+    <div className={`w-14 h-14 rounded-2xl ${color} bg-opacity-10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+      <Icon className={color.replace('bg-', 'text-')} size={28} />
+    </div>
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{label}</p>
+    <p className="text-4xl font-black text-slate-800 mt-2 tracking-tighter">{value}</p>
+  </div>
+);
+
+function DashboardSection({ data }) {
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="grid grid-cols-4 gap-8">
+        <StatCard label="O'qituvchilar" value={data.teachers.length} icon={Users} color="bg-blue-600" />
+        <StatCard label="Guruhlar" value={data.groups.length} icon={GraduationCap} color="bg-indigo-600" />
+        <StatCard label="Xonalar" value={data.rooms.length} icon={MapPin} color="bg-emerald-600" />
+        <StatCard label="Fanlar" value={data.subjects.length} icon={BookOpen} color="bg-rose-600" />
+      </div>
+      
+      <div className="grid grid-cols-12 gap-8">
+        <div className="col-span-8 bg-[#0f172a] p-12 rounded-[3.5rem] relative overflow-hidden flex flex-col justify-center min-h-[400px]">
+           <div className="relative z-10">
+             <h3 className="text-4xl font-black text-white mb-6 leading-tight">Professional Jadval <br/><span className="text-blue-500 italic">Boshqaruvi Tizimi</span></h3>
+             <p className="text-slate-400 text-lg max-w-lg mb-10 leading-relaxed">
+               Samarqand KOICA o'quv markazi uchun maxsus ishlab chiqilgan dars jadvali algoritmi. O'qituvchi ta'tillari va fan ustuvorligini avtomatik tahlil qiladi.
+             </p>
+             <div className="flex gap-4">
+                <div className="px-6 py-3 bg-slate-800 rounded-2xl border border-slate-700 flex items-center gap-3">
+                    <ShieldCheck className="text-emerald-400" size={20} />
+                    <span className="text-[10px] font-black uppercase text-slate-300">Parallel darslar nazorati</span>
                 </div>
-            </nav>
+                <div className="px-6 py-3 bg-slate-800 rounded-2xl border border-slate-700 flex items-center gap-3">
+                    <BarChart3 className="text-blue-400" size={20} />
+                    <span className="text-[10px] font-black uppercase text-slate-300">Haftalik yuklama tahlili</span>
+                </div>
+             </div>
+           </div>
+           <Calendar className="absolute -bottom-10 -right-10 text-white/5" size={400} />
+        </div>
 
-            <div class="p-4 bg-black/20 text-center border-t border-gray-800">
-                <p class="text-[10px] text-gray-500">Rashid X. tomonidan</p>
-                <button onclick="logout()" class="text-xs text-red-400 mt-2 hover:underline">Chiqish</button>
-            </div>
-        </aside>
-
-        <!-- Content -->
-        <main class="flex-1 bg-slate-50 overflow-y-auto p-4 md:p-8">
-            <header class="flex justify-between items-center mb-8">
+        <div className="col-span-4 space-y-4">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 flex items-center justify-between">
                 <div>
-                    <h2 id="pageTitle" class="text-2xl font-bold text-slate-800">Boshqaruv Paneli</h2>
-                    <p id="pageSub" class="text-sm text-gray-500">Xush kelibsiz, Rashid!</p>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Markaz Holati</h4>
+                    <p className="text-xl font-black text-slate-800 uppercase">Faol</p>
                 </div>
-                <div class="flex gap-2">
-                    <select id="langSelect" class="p-2 border rounded-lg text-xs font-bold">
-                        <option value="uz">UZB</option>
-                        <option value="ru">RUS</option>
-                        <option value="en">ENG</option>
-                    </select>
-                </div>
-            </header>
-
-            <!-- Page Dashboard -->
-            <div id="page-dashboard" class="page space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="card p-6 border-l-4 border-blue-500">
-                        <p class="text-xs font-bold text-gray-400 uppercase">O'qituvchilar</p>
-                        <p id="stat-teachers" class="text-3xl font-bold">0</p>
+                <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse shadow-lg shadow-green-500/50"></div>
+            </div>
+            <div className="bg-blue-600 p-10 rounded-[2.5rem] text-white">
+                <h4 className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-6">Tezkor Ma'lumot</h4>
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center pb-4 border-b border-blue-500/50">
+                        <span className="text-xs font-bold text-blue-100">Jami haftalik soat:</span>
+                        <span className="text-xl font-black">{data.subjects.reduce((a, b) => a + (Number(b.weeklyHours) || 0), 0)}</span>
                     </div>
-                    <div class="card p-6 border-l-4 border-green-500">
-                        <p class="text-xs font-bold text-gray-400 uppercase">Guruhlar</p>
-                        <p id="stat-groups" class="text-3xl font-bold">0</p>
-                    </div>
-                    <div class="card p-6 border-l-4 border-purple-500">
-                        <p class="text-xs font-bold text-gray-400 uppercase">Xonalar</p>
-                        <p id="stat-rooms" class="text-3xl font-bold">0</p>
-                    </div>
-                    <div class="card p-6 border-l-4 border-red-500">
-                        <p class="text-xs font-bold text-gray-400 uppercase">Fanlar</p>
-                        <p id="stat-subjects" class="text-3xl font-bold">0</p>
+                    <div className="flex justify-between items-center pb-4 border-b border-blue-500/50">
+                        <span className="text-xs font-bold text-blue-100">O'rtacha yuklama:</span>
+                        <span className="text-xl font-black">24 soat</span>
                     </div>
                 </div>
             </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-            <!-- Page Teachers -->
-            <div id="page-teachers" class="page hidden space-y-4">
-                <div class="flex gap-2">
-                    <button onclick="openModal('teacherModal')" class="bg-bardoviy text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-plus"></i> Qo'shish</button>
-                    <button onclick="importExcel('teachers')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-file-import"></i> Excel Import</button>
-                </div>
-                <div class="card overflow-hidden">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-gray-50 border-b">
-                            <tr>
-                                <th class="p-4">F.I.SH</th>
-                                <th class="p-4">Ta'til vaqti</th>
-                                <th class="p-4">Amallar</th>
-                            </tr>
-                        </thead>
-                        <tbody id="teacherTable"></tbody>
-                    </table>
+function TeachersSection({ data, db, appId }) {
+  const [form, setForm] = useState({ name: '', nickname: '', title: '', vacationStart: '', vacationEnd: '' });
+
+  const add = () => {
+    if (!form.name || !form.nickname) return alert("Majburiy maydonlarni to'ldiring!");
+    addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), { ...form, title: form.title || "O'qituvchi" });
+    setForm({ name: '', nickname: '', title: '', vacationStart: '', vacationEnd: '' });
+  };
+
+  return (
+    <div className="grid grid-cols-12 gap-8 animate-in slide-in-from-bottom duration-500">
+      <div className="col-span-4 bg-white p-10 rounded-[3rem] border border-slate-100 h-fit space-y-6 shadow-sm">
+        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center"><Plus size={16} /></div> 
+            Yangi o'qituvchi
+        </h3>
+        
+        <div className="space-y-4">
+            <input placeholder="F.I.SH" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-medium text-sm focus:bg-white transition-all" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <input placeholder="Nickname" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-medium text-sm focus:bg-white transition-all" value={form.nickname} onChange={e => setForm({...form, nickname: e.target.value})} />
+            <input placeholder="Unvoni (PhD, Dotsent...)" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-medium text-sm focus:bg-white transition-all" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+
+            <div className="p-6 bg-rose-50 rounded-[2rem] border border-rose-100">
+                <p className="text-[9px] font-black text-rose-600 uppercase mb-4 flex items-center gap-2">
+                    <Plane size={14} /> Ta'til davri (analiz uchun)
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-2 ml-1">Dan</p>
+                        <input type="date" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none text-[10px] font-bold" value={form.vacationStart} onChange={e => setForm({...form, vacationStart: e.target.value})} />
+                    </div>
+                    <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-2 ml-1">Gacha</p>
+                        <input type="date" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none text-[10px] font-bold" value={form.vacationEnd} onChange={e => setForm({...form, vacationEnd: e.target.value})} />
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Page Subjects -->
-            <div id="page-subjects" class="page hidden space-y-4">
-                <button onclick="openModal('subjectModal')" class="bg-bardoviy text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-plus"></i> Fan Qo'shish</button>
-                <div class="card overflow-hidden">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-gray-50 border-b">
-                            <tr>
-                                <th class="p-4">Fan nomi</th>
-                                <th class="p-4">Turi</th>
-                                <th class="p-4">Hajmi (soat)</th>
-                                <th class="p-4">Sems.</th>
-                                <th class="p-4">Amallar</th>
-                            </tr>
-                        </thead>
-                        <tbody id="subjectTable"></tbody>
-                    </table>
+        <button onClick={add} className="w-full py-6 bg-blue-600 text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all">Ro'yxatga Qo'shish</button>
+      </div>
+
+      <div className="col-span-8 grid grid-cols-2 gap-6 content-start">
+        {data.teachers.map(t => (
+          <div key={t.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 flex items-center justify-between group hover:border-blue-300 transition-all hover:shadow-xl">
+            <div className="flex items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex flex-col items-center justify-center text-slate-400 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+                <UserCircle size={32} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                    <h4 className="font-black text-slate-800 text-base leading-tight">{t.name}</h4>
+                    <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg uppercase tracking-tighter">@{t.nickname}</span>
                 </div>
+                <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{t.title}</span>
+                    {t.vacationStart && (
+                        <span className="flex items-center gap-1.5 text-[9px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md uppercase">
+                           <Plane size={10} /> Ta'tilda
+                        </span>
+                    )}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'teachers', t.id))} className="text-slate-200 hover:text-red-500 p-3 bg-slate-50 hover:bg-red-50 rounded-2xl transition-all">
+              <Trash2 size={20} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ManagementSection({ type, list, db, appId, icon: Icon }) {
+  const [val, setVal] = useState('');
+  const add = () => {
+    if (!val) return;
+    addDoc(collection(db, 'artifacts', appId, 'public', 'data', type), type === 'rooms' ? { number: val } : { name: val });
+    setVal('');
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 flex gap-6 shadow-sm">
+        <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner">
+            <Icon size={30} />
+        </div>
+        <input 
+          type="text" placeholder={`${type === 'rooms' ? 'Xona raqami' : 'Guruh nomi'}...`} 
+          className="flex-1 px-8 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:border-blue-500 font-black text-sm transition-all"
+          value={val} onChange={e => setVal(e.target.value)}
+        />
+        <button onClick={add} className="px-14 bg-blue-600 text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all">Qo'shish</button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-6">
+        {list.map(item => (
+            <div key={item.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 flex items-center justify-between group hover:border-indigo-400 transition-all hover:shadow-lg">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
+                        <Icon size={20} />
+                    </div>
+                    <h4 className="font-black text-slate-800 text-base">{item.name || item.number}</h4>
+                </div>
+                <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', type, item.id))} className="text-slate-200 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition-all">
+                    <Trash2 size={18} />
+                </button>
+            </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SubjectsSection({ data, db, appId }) {
+  const [form, setForm] = useState({ 
+    name: '', teacher: '', group: '', room: '', weeklyHours: '', semester: '1', priority: '1', type: 'nazariy' 
+  });
+
+  const add = () => {
+    if (!form.name || !form.teacher || !form.group || !form.weeklyHours) return alert("Barcha maydonlarni to'ldiring!");
+    // Standart 16 hafta uchun hisoblash
+    const weekly = Number(form.weeklyHours);
+    const total = weekly * 16;
+    
+    addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'subjects'), {
+        ...form,
+        weeklyHours: weekly,
+        totalHours: total,
+        remainingHours: total,
+        completedHours: 0,
+        priority: Number(form.priority)
+    });
+    setForm({ name: '', teacher: '', group: '', room: '', weeklyHours: '', semester: '1', priority: '1', type: 'nazariy' });
+  };
+
+  return (
+    <div className="grid grid-cols-12 gap-8 animate-in slide-in-from-right duration-500">
+      {/* ADD SUBJECT FORM */}
+      <div className="col-span-4 bg-white p-10 rounded-[3rem] border border-slate-100 h-fit space-y-6 shadow-sm sticky top-0">
+        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+             <BookOpen size={16} className="text-rose-500" /> Yangi Fan Qo'shish
+        </h3>
+        
+        <div className="space-y-4">
+            <input placeholder="Fan nomi" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none text-sm font-black focus:bg-white transition-all shadow-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            
+            <div className="grid grid-cols-2 gap-3">
+                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-[10px] font-black uppercase cursor-pointer" onChange={e => setForm({...form, teacher: e.target.value})} value={form.teacher}>
+                    <option value="">O'qituvchi...</option>
+                    {data.teachers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                </select>
+                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-[10px] font-black uppercase cursor-pointer" onChange={e => setForm({...form, group: e.target.value})} value={form.group}>
+                    <option value="">Guruh...</option>
+                    {data.groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                </select>
             </div>
 
-            <!-- Page Generator (Schedule Result) -->
-            <div id="page-generator" class="page hidden space-y-6">
-                <div class="flex flex-wrap gap-2 mb-4 bg-white p-4 rounded-xl shadow-sm">
-                    <select id="genGroup" class="p-2 border rounded-lg text-sm flex-1 min-w-[150px]"></select>
-                    <input type="date" id="genStartDate" class="p-2 border rounded-lg text-sm">
-                    <button onclick="generateSchedule()" class="bg-bardoviy text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-cogs"></i> Jadvalni Hisoblash</button>
-                    <button onclick="exportToPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-file-pdf"></i> PDF</button>
-                    <button onclick="exportToExcel()" class="bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fas fa-file-excel"></i> Excel</button>
+            <div className="grid grid-cols-2 gap-3">
+                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-[10px] font-black uppercase cursor-pointer" onChange={e => setForm({...form, room: e.target.value})} value={form.room}>
+                    <option value="">Xona...</option>
+                    {data.rooms.map(r => <option key={r.id} value={r.number}>{r.number}-xona</option>)}
+                </select>
+                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-[10px] font-black uppercase cursor-pointer" onChange={e => setForm({...form, type: e.target.value})} value={form.type}>
+                    <option value="nazariy">Nazariy</option>
+                    <option value="amaliy">Amaliy</option>
+                </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className="relative">
+                    <input type="number" placeholder="Haftalik soat" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none text-[10px] font-black" value={form.weeklyHours} onChange={e => setForm({...form, weeklyHours: e.target.value})} />
+                    <Clock size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
                 </div>
-                
-                <div id="schedulePrintArea" class="card p-8 min-h-[500px] overflow-x-auto">
-                    <!-- Tasdiqlash qismi -->
-                    <div class="flex justify-end mb-4">
-                        <div class="text-right text-[12px] font-bold leading-tight">
-                            TASDIQLAYMAN<br>
-                            Samarqand viloyati kasbiy ko'nikmalar<br>
-                            mintaqaviy markazi O'IBDO'B<br>
-                            B. Abdullayev _____________<br>
-                            <span id="stampDate">2026-y.</span>
+                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-[10px] font-black uppercase cursor-pointer" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
+                    <option value="1">Yuqori Prioritet</option>
+                    <option value="2">O'rta Prioritet</option>
+                    <option value="3">Past Prioritet</option>
+                </select>
+            </div>
+            {form.weeklyHours && (
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
+                    <span className="text-[9px] font-black text-blue-600 uppercase">Jami yuklama (16 hafta):</span>
+                    <span className="text-sm font-black text-blue-800">{Number(form.weeklyHours) * 16} soat</span>
+                </div>
+            )}
+        </div>
+
+        <button onClick={add} className="w-full py-6 bg-blue-600 text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 hover:bg-blue-700 transition-all">Fan Yuklamasini Saqlash</button>
+      </div>
+
+      {/* SUBJECT LIST WITH METRICS */}
+      <div className="col-span-8 space-y-6 overflow-y-auto max-h-[calc(100vh-150px)] pr-4 pb-10">
+        <div className="flex items-center justify-between px-4 mb-2">
+            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Kiritilgan fanlar yuklamasi</h4>
+            <div className="flex gap-4">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Amaliy</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Nazariy</span>
+                </div>
+            </div>
+        </div>
+        
+        {data.subjects.length === 0 && (
+            <div className="h-60 bg-white rounded-[3rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
+                <BookOpen size={40} className="mb-4 opacity-20" />
+                <p className="font-black text-[10px] uppercase tracking-widest">Hozircha fanlar mavjud emas</p>
+            </div>
+        )}
+
+        {data.subjects.map(s => {
+          const completionRate = s.totalHours > 0 ? ((s.completedHours || 0) / s.totalHours) * 100 : 0;
+          
+          return (
+            <div key={s.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden border-l-[10px] border-l-slate-100 hover:border-l-blue-500">
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-6">
+                        <div className={`w-14 h-14 ${s.type === 'amaliy' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'} rounded-2xl flex flex-col items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}>
+                            {s.type === 'amaliy' ? <Monitor size={22} /> : <Book size={22} />}
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h4 className="font-black text-slate-800 text-lg uppercase leading-none">{s.name}</h4>
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${s.priority === 1 ? 'bg-rose-100 text-rose-600' : s.priority === 2 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                                    P{s.priority}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2">
+                                <p className="text-[9px] text-slate-400 font-black uppercase flex items-center gap-1.5"><Users size={12} className="text-slate-300" /> {s.teacher}</p>
+                                <p className="text-[9px] text-slate-400 font-black uppercase flex items-center gap-1.5"><GraduationCap size={12} className="text-slate-300" /> {s.group}</p>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="text-center mb-6">
-                        <h3 class="font-bold text-sm uppercase">Samarqand viloyati kasbiy ko'nikmalar mintaqaviy markazi</h3>
-                        <p class="text-lg font-bold" id="scheduleTitleText">(Guruh nomi) dars jadvali</p>
-                        <p class="text-xs" id="schedulePeriodText">sana - sana</p>
-                    </div>
+                    <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'subjects', s.id))} className="text-slate-200 hover:text-red-500 p-3 bg-slate-50 hover:bg-red-50 rounded-xl transition-all">
+                        <Trash2 size={20} />
+                    </button>
+                </div>
 
-                    <table class="w-full schedule-table border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="w-24">Kunlar</th>
-                                <th>1-juftlik<br><span class="font-normal">08:30 - 09:50</span></th>
-                                <th>2-juftlik<br><span class="font-normal">10:00 - 11:20</span></th>
-                                <th>3-juftlik<br><span class="font-normal">12:00 - 13:20</span></th>
-                                <th>4-juftlik<br><span class="font-normal">13:30 - 14:50</span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="generatedScheduleBody"></tbody>
-                    </table>
-
-                    <div class="mt-8 flex justify-end">
-                        <div class="text-right text-[12px] font-bold">
-                            Bo'lim boshlig'i Xujamatov R. __________
+                <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-50">
+                    <div className="bg-slate-50 p-4 rounded-2xl">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Clock size={14} className="text-blue-500" />
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Haftalik yuklama</p>
                         </div>
+                        <p className="text-xl font-black text-slate-800">{s.weeklyHours} <span className="text-[10px] text-slate-400 uppercase">soat</span></p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-2xl">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Layers size={14} className="text-indigo-500" />
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Umumiy hajm</p>
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.totalHours} <span className="text-[10px] text-slate-400 uppercase">soat</span></p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-2xl">
+                        <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp size={14} className="text-emerald-500" />
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Qolgan vaqt</p>
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.remainingHours} <span className="text-[10px] text-slate-400 uppercase">soat</span></p>
                     </div>
                 </div>
-            </div>
 
-            <!-- Page Users (Admin) -->
-            <div id="page-users" class="page hidden space-y-4">
-                <h3 class="text-lg font-bold">Foydalanuvchilar So'rovlari</h3>
-                <div class="card overflow-hidden">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-gray-50 border-b">
-                            <tr>
-                                <th class="p-4">F.I.SH</th>
-                                <th class="p-4">Login</th>
-                                <th class="p-4">Holat / Ruxsat</th>
-                                <th class="p-4">Amallar</th>
-                            </tr>
-                        </thead>
-                        <tbody id="userTable"></tbody>
-                    </table>
+                {/* PROGRESS BAR */}
+                <div className="mt-6 space-y-2">
+                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
+                        <span className="text-slate-400">O'zlashtirish darajasi</span>
+                        <span className="text-blue-600">{completionRate.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out shadow-lg shadow-blue-500/20"
+                            style={{ width: `${completionRate}%` }}
+                        ></div>
+                    </div>
                 </div>
+              </div>
             </div>
-
-        </main>
+          );
+        })}
+      </div>
     </div>
+  );
+}
 
-    <!-- Modal Teacher -->
-    <div id="teacherModal" class="fixed inset-0 bg-black/60 hidden z-[100] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6">
-            <h3 class="text-xl font-bold mb-4">O'qituvchi ma'lumotlari</h3>
-            <div class="space-y-4">
-                <input type="text" id="tName" placeholder="F.I.SH" class="w-full p-3 border rounded-xl">
-                <div>
-                    <label class="text-xs font-bold text-gray-500">Ta'til (band bo'lgan kunlar):</label>
-                    <input type="text" id="tHolidays" placeholder="2026-03-20, 2026-03-21" class="w-full p-3 border rounded-xl">
-                    <p class="text-[9px] text-gray-400 mt-1">Vergul bilan sanalarni kiriting.</p>
-                </div>
-                <div class="flex gap-2 pt-4">
-                    <button onclick="closeModal('teacherModal')" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold">Bekor qilish</button>
-                    <button onclick="saveTeacher()" class="flex-1 py-3 bg-bardoviy text-white rounded-xl font-bold">Saqlash</button>
-                </div>
-            </div>
-        </div>
-    </div>
+// --- COMPLEX SCHEDULER ENGINE ---
+function ScheduleSection({ data, db, appId }) {
+  const [viewType, setViewType] = useState('group'); // 'group' or 'teacher'
+  const [selectedId, setSelectedId] = useState('');
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [exportInfo, setExportInfo] = useState({ tasdiqlovchi: '', lavozim1: '', imzolovchi: '', lavozim2: '', markaz: 'SAM KOICA CENTER' });
 
-    <!-- Modal Subject -->
-    <div id="subjectModal" class="fixed inset-0 bg-black/60 hidden z-[100] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h3 class="text-xl font-bold mb-4">Yangi Fan Qo'shish</h3>
-            <div class="space-y-4">
-                <input type="text" id="sName" placeholder="Fan nomi" class="w-full p-3 border rounded-xl">
-                <select id="sType" class="w-full p-3 border rounded-xl">
-                    <option value="theory">Nazariy (1 para)</option>
-                    <option value="practice">Amaliy (3 para)</option>
-                </select>
-                <input type="number" id="sHours" placeholder="Umumiy soat (hajmi)" class="w-full p-3 border rounded-xl">
-                <input type="number" id="sWeekly" placeholder="Haftalik soat" class="w-full p-3 border rounded-xl">
-                <select id="sSem" class="w-full p-3 border rounded-xl">
-                    <option value="1">1-Semestr</option>
-                    <option value="2">2-Semestr</option>
-                </select>
-                <input type="number" id="sPriority" placeholder="Prioritet (1-10)" class="w-full p-3 border rounded-xl">
-                
-                <hr>
-                <label class="text-xs font-bold text-gray-500">Bog'lash:</label>
-                <select id="sTeacher" class="w-full p-3 border rounded-xl"></select>
-                <select id="sGroup" class="w-full p-3 border rounded-xl"></select>
-                <select id="sRoom" class="w-full p-3 border rounded-xl"></select>
+  // Slots: 1, 2, 3, 4 (2 hours each = total 8 hours max)
+  const days = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
+  const slots = [1, 2, 3, 4];
 
-                <div class="flex gap-2 pt-4">
-                    <button onclick="closeModal('subjectModal')" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold">Yopish</button>
-                    <button onclick="saveSubject()" class="flex-1 py-3 bg-bardoviy text-white rounded-xl font-bold">Saqlash</button>
-                </div>
-            </div>
-        </div>
-    </div>
+  // Logic to block/unblock slots
+  const toggleBlock = (day, slot) => {
+    const existing = data.blockedSlots.find(s => s.day === day && s.slot === slot && s.ownerId === selectedId);
+    if (existing) {
+        deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'blockedSlots', existing.id));
+    } else {
+        addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'blockedSlots'), { day, slot, ownerId: selectedId });
+    }
+  };
 
-    <!-- Firebase SDK va App Logic -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  const isBlocked = (day, slot) => data.blockedSlots.some(s => s.day === day && s.slot === slot && s.ownerId === selectedId);
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCu5ZGGOgFx80isAyi41m7YlW1HYrMj8xA",
-            authDomain: "sankoica-dars-jadvali-uchun.firebaseapp.com",
-            projectId: "sankoica-dars-jadvali-uchun",
-            storageBucket: "sankoica-dars-jadvali-uchun.appspot.com",
-            messagingSenderId: "489363105127",
-            appId: "1:489363105127:web:947c45ea2a6465fe483bc2"
-        };
+  // SCHEDULING ALGORITHM
+  const generatedSchedule = useMemo(() => {
+    if (!selectedId) return null;
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+    let fullSchedule = {};
+    let currentData = [...data.subjects];
+    
+    // Simple logic: Group by selected filter
+    const subjects = viewType === 'group' 
+        ? currentData.filter(s => s.group === selectedId)
+        : currentData.filter(s => s.teacher === selectedId);
 
-        let currentUserData = null;
-        let localData = {
-            teachers: [],
-            groups: [],
-            rooms: [],
-            subjects: [],
-            users: []
-        };
+    if (subjects.length === 0) return null;
 
-        // --- AUTH LOGIC ---
-        window.toggleAuth = (type) => {
-            const isLogin = type === 'login';
-            document.getElementById('loginFields').classList.toggle('hidden', !isLogin);
-            document.getElementById('regFields').classList.toggle('hidden', isLogin);
-            document.getElementById('tab-login').className = isLogin ? "flex-1 py-2 font-bold border-b-2 border-bardoviy text-bardoviy" : "flex-1 py-2 font-bold text-gray-400";
-            document.getElementById('tab-reg').className = !isLogin ? "flex-1 py-2 font-bold border-b-2 border-blue-600 text-blue-600" : "flex-1 py-2 font-bold text-gray-400";
-        };
+    // Sorting by priority (1 is high)
+    subjects.sort((a, b) => a.priority - b.priority);
 
-        window.handleLogin = async () => {
-            const u = document.getElementById('loginUser').value.trim();
-            const p = document.getElementById('loginPass').value.trim();
-
-            if(u === "Rashid" && p === "Koica2026") {
-                loginSuccess({ uid: 'admin', name: 'Rashid', role: 'admin', status: 'approved' });
-                return;
+    // Initial fill with blocked slots
+    days.forEach(day => {
+        fullSchedule[day] = {};
+        slots.forEach(slot => {
+            if (isBlocked(day, slot)) {
+                fullSchedule[day][slot] = { type: 'blocked' };
+            } else {
+                fullSchedule[day][slot] = null;
             }
+        });
+    });
 
-            try {
-                await signInAnonymously(auth);
-                const userDoc = await getDoc(doc(db, "users", u));
-                if(userDoc.exists()) {
-                    const data = userDoc.data();
-                    if(data.password === p) {
-                        if(data.status === 'approved') {
-                            loginSuccess(data);
-                        } else {
-                            showToast("Hisobingiz hali admin tomonidan tasdiqlanmagan!", true);
-                        }
-                    } else { showToast("Parol noto'g'ri!", true); }
-                } else { showToast("Foydalanuvchi topilmadi!", true); }
-            } catch (e) { showToast("Xatolik: " + e.message, true); }
-        };
+    // DISTRIBUTE SUBJECTS
+    let usedInWeek = new Set();
 
-        window.handleRegister = async () => {
-            const name = document.getElementById('regName').value;
-            const user = document.getElementById('regUser').value;
-            const pass = document.getElementById('regPass').value;
+    days.forEach(day => {
+        let dailyHours = 0;
+        
+        subjects.forEach(sub => {
+            if (dailyHours >= 8) return; 
 
-            if(!name || !user || !pass) return showToast("Barcha maydonlarni to'ldiring!", true);
+            const teacher = data.teachers.find(t => t.name === sub.teacher);
+            const isOnVacation = teacher?.vacationStart && teacher?.vacationEnd; 
 
-            // Foydalanuvchilar sonini tekshirish (Limit 50)
-            if(localData.users.length >= 50) return showToast("Foydalanuvchilar limiti (50 ta) to'lgan!", true);
+            if (isOnVacation) return; 
 
-            try {
-                await setDoc(doc(db, "users", user), {
-                    name, login: user, password: pass, role: 'viewer', status: 'pending', createdAt: Date.now()
-                });
-                showToast("So'rov yuborildi. Admin tasdiqlashini kuting.");
-                toggleAuth('login');
-            } catch (e) { showToast("Xatolik!", true); }
-        };
-
-        function loginSuccess(data) {
-            currentUserData = data;
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('mainApp').classList.remove('hidden');
-            document.getElementById('pageSub').innerText = `Xush kelibsiz, ${data.name}!`;
-            if(data.role === 'admin') document.getElementById('adminMenu').classList.remove('hidden');
-            showToast("Tizimga muvaffaqiyatli kirdingiz!");
-            startListeners();
-        }
-
-        // --- DATA LISTENERS ---
-        function startListeners() {
-            onSnapshot(collection(db, "teachers"), (s) => { localData.teachers = s.docs.map(d=>({id:d.id, ...d.data()})); renderTeachers(); updateStats(); });
-            onSnapshot(collection(db, "subjects"), (s) => { localData.subjects = s.docs.map(d=>({id:d.id, ...d.data()})); renderSubjects(); updateStats(); });
-            onSnapshot(collection(db, "groups"), (s) => { localData.groups = s.docs.map(d=>({id:d.id, ...d.data()})); updateStats(); updateGenSelectors(); });
-            onSnapshot(collection(db, "rooms"), (s) => { localData.rooms = s.docs.map(d=>({id:d.id, ...d.data()})); updateStats(); });
-            onSnapshot(collection(db, "users"), (s) => { localData.users = s.docs.map(d=>({id:d.id, ...d.data()})); renderUsers(); });
-        }
-
-        // --- TEACHERS ---
-        window.saveTeacher = async () => {
-            const name = document.getElementById('tName').value;
-            const hol = document.getElementById('tHolidays').value.split(',').map(s=>s.trim());
-            if(!name) return;
-            await addDoc(collection(db, "teachers"), { name, holidays: hol });
-            closeModal('teacherModal');
-            showToast("O'qituvchi saqlandi.");
-        };
-
-        function renderTeachers() {
-            const b = document.getElementById('teacherTable');
-            b.innerHTML = localData.teachers.map(t => `
-                <tr class="border-b">
-                    <td class="p-4 font-bold">${t.name}</td>
-                    <td class="p-4 text-xs text-red-500">${t.holidays.join(', ')}</td>
-                    <td class="p-4"><button onclick="deleteDocById('teachers', '${t.id}')" class="text-red-500"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
-        // --- SUBJECTS ---
-        window.saveSubject = async () => {
-            const s = {
-                name: document.getElementById('sName').value,
-                type: document.getElementById('sType').value,
-                totalHours: parseInt(document.getElementById('sHours').value),
-                weeklyHours: parseInt(document.getElementById('sWeekly').value),
-                semester: document.getElementById('sSem').value,
-                priority: parseInt(document.getElementById('sPriority').value),
-                teacher: document.getElementById('sTeacher').value,
-                group: document.getElementById('sGroup').value,
-                room: document.getElementById('sRoom').value
-            };
-            await addDoc(collection(db, "subjects"), s);
-            closeModal('subjectModal');
-            showToast("Fan qo'shildi.");
-        };
-
-        function renderSubjects() {
-            const b = document.getElementById('subjectTable');
-            b.innerHTML = localData.subjects.map(s => `
-                <tr class="border-b">
-                    <td class="p-4 font-bold">${s.name}</td>
-                    <td class="p-4">${s.type === 'theory' ? 'Nazariy' : 'Amaliy'}</td>
-                    <td class="p-4">${s.totalHours} s</td>
-                    <td class="p-4">${s.semester}-sem</td>
-                    <td class="p-4"><button onclick="deleteDocById('subjects', '${s.id}')" class="text-red-500"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
-        // --- GENERATOR ALGORITHM ---
-        window.generateSchedule = () => {
-            const groupId = document.getElementById('genGroup').value;
-            const startDate = new Date(document.getElementById('genStartDate').value);
-            if(!groupId || isNaN(startDate)) return showToast("Guruh va sanani tanlang!", true);
-
-            const groupSubjects = localData.subjects.filter(s => s.group === groupId).sort((a,b) => b.priority - a.priority);
-            const days = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
-            const resultBody = document.getElementById('generatedScheduleBody');
-            resultBody.innerHTML = '';
-
-            // Algoritm cheklovlari (Memory)
-            let teacherLoad = {}; // {teacherId_date_slot: true}
-            let roomLoad = {}; // {roomId_date_slot: true}
-            
-            days.forEach((dayName, dayIdx) => {
-                let rowHtml = `<tr><td class="font-bold bg-slate-50">${dayName}</td>`;
-                let currentDayDate = new Date(startDate);
-                currentDayDate.setDate(startDate.getDate() + dayIdx);
-                const dateStr = currentDayDate.toISOString().split('T')[0];
-
-                for(let slot = 1; slot <= 4; slot++) {
-                    let cellContent = "-";
-                    let cellClass = "";
-
-                    // Prioritet va Shartlar bo'yicha fan qidirish
-                    for(let subj of groupSubjects) {
-                        const teacher = localData.teachers.find(t => t.name === subj.teacher);
-                        const isHoliday = teacher?.holidays?.includes(dateStr);
-                        const tKey = `${subj.teacher}_${dateStr}_${slot}`;
-                        const rKey = `${subj.room}_${dateStr}_${slot}`;
-
-                        if(!isHoliday && !teacherLoad[tKey] && !roomLoad[rKey]) {
-                            // Nazariya/Amaliyot qoidasi: 1-para Nazariya, keyingilar Amaliyot ideali
-                            if(subj.type === 'theory' && slot === 1) {
-                                cellContent = `<b>${subj.name}</b><br><span class="text-[10px]">${subj.teacher} (${subj.room})</span>`;
-                                cellClass = "theory-cell";
-                                teacherLoad[tKey] = true; roomLoad[rKey] = true;
-                                break;
-                            } else if(subj.type === 'practice' && slot > 1) {
-                                cellContent = `<b>${subj.name}</b><br><span class="text-[10px]">${subj.teacher} (${subj.room})</span>`;
-                                cellClass = "practice-cell";
-                                teacherLoad[tKey] = true; roomLoad[rKey] = true;
-                                break;
-                            }
-                        }
-                    }
-                    rowHtml += `<td class="${cellClass}">${cellContent}</td>`;
+            if (sub.type === 'amaliy') {
+                // Needs 3 consecutive slots (6 hours)
+                let startSlot = slots.find(s => !fullSchedule[day][s] && !fullSchedule[day][s+1] && !fullSchedule[day][s+2]);
+                if (startSlot && startSlot <= 2 && !usedInWeek.has(sub.id + day)) {
+                    fullSchedule[day][startSlot] = sub;
+                    fullSchedule[day][startSlot+1] = { ...sub, type: 'merged' };
+                    fullSchedule[day][startSlot+2] = { ...sub, type: 'merged' };
+                    dailyHours += 6;
+                    usedInWeek.add(sub.id + day);
                 }
-                rowHtml += `</tr>`;
-                resultBody.innerHTML += rowHtml;
-            });
-
-            document.getElementById('scheduleTitleText').innerText = `${groupId} guruhi dars jadvali`;
-            showToast("Jadval shakllantirildi.");
-        };
-
-        // --- UTILS ---
-        window.deleteDocById = async (coll, id) => {
-            if(confirm("Haqiqatdan o'chirmoqchimisiz?")) await deleteDoc(doc(db, coll, id));
-        };
-
-        window.showPage = (id) => {
-            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-            document.getElementById('page-' + id).classList.remove('hidden');
-            document.getElementById('pageTitle').innerText = id.charAt(0).toUpperCase() + id.slice(1);
-        };
-
-        function updateStats() {
-            document.getElementById('stat-teachers').innerText = localData.teachers.length;
-            document.getElementById('stat-groups').innerText = localData.groups.length;
-            document.getElementById('stat-rooms').innerText = localData.rooms.length;
-            document.getElementById('stat-subjects').innerText = localData.subjects.length;
-        }
-
-        function updateGenSelectors() {
-            const g = document.getElementById('genGroup');
-            const st = document.getElementById('sTeacher');
-            const sg = document.getElementById('sGroup');
-            const sr = document.getElementById('sRoom');
-            
-            const groupOptions = localData.groups.map(x => `<option value="${x.name}">${x.name}</option>`).join('');
-            g.innerHTML = groupOptions; sg.innerHTML = groupOptions;
-            st.innerHTML = localData.teachers.map(x => `<option value="${x.name}">${x.name}</option>`).join('');
-            sr.innerHTML = localData.rooms.map(x => `<option value="${x.number}">${x.number}-xona</option>`).join('');
-        }
-
-        window.showToast = (msg, isError = false) => {
-            const c = document.getElementById('toast-container');
-            const t = document.createElement('div');
-            t.className = `toast shadow-lg ${isError ? 'bg-red-600' : 'bg-slate-800'}`;
-            t.innerHTML = msg;
-            c.appendChild(t);
-            setTimeout(() => t.remove(), 4000);
-        };
-
-        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
-        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-        window.logout = () => location.reload();
-
-        // --- ADMIN USERS ---
-        function renderUsers() {
-            const b = document.getElementById('userTable');
-            b.innerHTML = localData.users.map(u => `
-                <tr class="border-b">
-                    <td class="p-4">${u.name}</td>
-                    <td class="p-4 font-mono">${u.login}</td>
-                    <td class="p-4">
-                        <select onchange="updateUserRole('${u.id}', this.value)" class="p-1 border rounded text-xs">
-                            <option value="viewer" ${u.role==='viewer'?'selected':''}>Faqat ko'rish</option>
-                            <option value="editor" ${u.role==='editor'?'selected':''}>Ko'rish/Yuklash</option>
-                            <option value="admin" ${u.role==='admin'?'selected':''}>To'liq ruxsat</option>
-                        </select>
-                    </td>
-                    <td class="p-4 flex gap-2">
-                        ${u.status === 'pending' ? `<button onclick="approveUser('${u.id}')" class="bg-green-500 text-white px-2 py-1 rounded text-[10px]">Tasdiqlash</button>` : `<span class="text-green-600 text-xs">Aktiv</span>`}
-                        <button onclick="deleteDocById('users', '${u.id}')" class="text-red-400"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        window.approveUser = async (id) => { await updateDoc(doc(db, "users", id), { status: 'approved' }); showToast("Tasdiqlandi"); };
-        window.updateUserRole = async (id, role) => { await updateDoc(doc(db, "users", id), { role }); showToast("Ruxsat o'zgardi"); };
-
-        // --- EXPORT PDF/EXCEL (Mock) ---
-        window.exportToPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'pt');
-            doc.text("Sam KOICA Dars Jadvali", 40, 40);
-            doc.autoTable({ html: '.schedule-table', startY: 60 });
-            doc.save('dars_jadvali.pdf');
-        };
-
-        window.exportToExcel = () => {
-            const table = document.querySelector(".schedule-table");
-            const wb = XLSX.utils.table_to_book(table);
-            XLSX.writeFile(wb, "dars_jadvali.xlsx");
-        };
-
-        // --- BOOTSTRAP INITIAL DATA (One time if empty) ---
-        async function bootstrap() {
-            const q = await getDoc(doc(db, "groups", "sample"));
-            if(!q.exists()) {
-                await setDoc(doc(db, "groups", "G-24"), { name: "G-24" });
-                await setDoc(doc(db, "rooms", "101"), { number: "101" });
+            } else {
+                // Nazariy: 1 slot (2 hours)
+                let freeSlot = slots.find(s => !fullSchedule[day][s]);
+                if (freeSlot && !usedInWeek.has(sub.id + day)) {
+                    fullSchedule[day][freeSlot] = sub;
+                    dailyHours += 2;
+                    usedInWeek.add(sub.id + day);
+                }
             }
-        }
-        bootstrap();
+        });
+    });
 
-    </script>
-</body>
-</html>
+    return fullSchedule;
+  }, [selectedId, viewType, data.subjects, data.blockedSlots]);
+
+  const exportPDF = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Header
+    doc.setFontSize(8);
+    doc.text(`TASDIQLAYMAN`, 150, 20);
+    doc.text(`${exportInfo.markaz}`, 150, 25);
+    doc.text(`${exportInfo.lavozim1}`, 150, 30);
+    doc.text(`${exportInfo.tasdiqlovchi}`, 150, 35);
+    doc.text(`_________________ (imzo)`, 150, 45);
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${exportInfo.markaz}`, 105, 60, { align: 'center' });
+    doc.text(`${selectedId} NING DARS JADVALI`, 105, 68, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text(`(Haftalik yuklama: Mart 2026)`, 105, 73, { align: 'center' });
+
+    // Table
+    const tableData = days.map(day => [
+        day,
+        generatedSchedule[day][1]?.name || (isBlocked(day, 1) ? 'Yopiq' : '-'),
+        generatedSchedule[day][2]?.name || (isBlocked(day, 2) ? 'Yopiq' : '-'),
+        generatedSchedule[day][3]?.name || (isBlocked(day, 3) ? 'Yopiq' : '-'),
+        generatedSchedule[day][4]?.name || (isBlocked(day, 4) ? 'Yopiq' : '-'),
+    ]);
+
+    doc.autoTable({
+        startY: 85,
+        head: [['KUNLAR', '1-Juftlik', '2-Juftlik', '3-Juftlik', '4-Juftlik']],
+        body: tableData,
+        theme: 'grid',
+        styles: { fontSize: 7, font: 'helvetica' },
+        headStyles: { fillColor: [15, 23, 42] }
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 20;
+    doc.text(`${exportInfo.lavozim2}`, 140, finalY);
+    doc.text(`${exportInfo.imzolovchi}`, 140, finalY + 10);
+    doc.text(`_________________ (imzo)`, 140, finalY + 15);
+
+    doc.save(`Jadval_${selectedId}.pdf`);
+  };
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws_data = [
+        [`${selectedId} JADVALI`],
+        ['KUNLAR', '1-PARA', '2-PARA', '3-PARA', '4-PARA'],
+        ...days.map(day => [
+            day,
+            generatedSchedule[day][1]?.name || '-',
+            generatedSchedule[day][2]?.name || '-',
+            generatedSchedule[day][3]?.name || '-',
+            generatedSchedule[day][4]?.name || '-',
+        ])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, "Jadval");
+    XLSX.writeFile(wb, `Jadval_${selectedId}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-8 animate-in zoom-in duration-500">
+      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm grid grid-cols-12 gap-8 items-end">
+        <div className="col-span-3">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Jadval turi</label>
+          <div className="flex p-1 bg-slate-100 rounded-2xl">
+              <button onClick={() => {setViewType('group'); setSelectedId('');}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter ${viewType === 'group' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Guruh</button>
+              <button onClick={() => {setViewType('teacher'); setSelectedId('');}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter ${viewType === 'teacher' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>O'qituvchi</button>
+          </div>
+        </div>
+        <div className="col-span-4">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">{viewType === 'group' ? 'Guruhni tanlang' : 'O\'qituvchini tanlang'}</label>
+          <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-sm" value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+            <option value="">Tanlash...</option>
+            {viewType === 'group' 
+                ? data.groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)
+                : data.teachers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+          </select>
+        </div>
+        <div className="col-span-5 flex gap-3">
+            <button onClick={exportPDF} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-slate-900/20 active:scale-95 transition-all">
+                <Printer size={16} /> PDF Export
+            </button>
+            <button onClick={exportExcel} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 active:scale-95 transition-all">
+                <FileSpreadsheet size={16} /> Excel Export
+            </button>
+        </div>
+      </div>
+
+      {selectedId && generatedSchedule && (
+        <div className="bg-white p-12 rounded-[3.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
+          <div className="mb-12 text-center">
+            <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter mb-2">{exportInfo.markaz}</h3>
+            <p className="text-sm font-black text-blue-600 uppercase tracking-widest">({selectedId}) NING DARS JADVALI</p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-2">
+                <thead>
+                    <tr>
+                        <th className="p-4 text-[11px] font-black uppercase text-slate-400 text-left w-32">KUNLAR</th>
+                        {slots.map(s => (
+                            <th key={s} className="p-4 text-[11px] font-black uppercase text-slate-400">
+                                {s}-Juftlik
+                                <div className="text-[8px] font-bold text-slate-300 normal-case mt-1">
+                                    {s === 1 ? '08:30-10:00' : s === 2 ? '10:10-11:40' : s === 3 ? '13:00-14:30' : '14:40-16:10'}
+                                </div>
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {days.map(day => (
+                        <tr key={day}>
+                            <td className="p-6 bg-slate-900 text-white font-black text-[11px] uppercase rounded-3xl text-center shadow-lg">{day}</td>
+                            {slots.map(slot => {
+                                const lesson = generatedSchedule[day][slot];
+                                const isBlockedSlot = isBlocked(day, slot);
+
+                                return (
+                                    <td 
+                                        key={slot} 
+                                        onClick={() => toggleBlock(day, slot)}
+                                        className={`p-1 border-2 border-dashed border-slate-100 rounded-[2rem] h-40 w-52 transition-all cursor-pointer relative overflow-hidden group
+                                            ${isBlockedSlot ? 'bg-rose-50 border-rose-200' : lesson?.type === 'merged' ? 'opacity-50' : lesson ? 'bg-blue-50/30 border-blue-100' : 'hover:bg-slate-50'}`}
+                                    >
+                                        {isBlockedSlot ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-rose-300">
+                                                <Lock size={20} />
+                                                <span className="text-[8px] font-black uppercase mt-2">Yopiq</span>
+                                            </div>
+                                        ) : lesson?.name ? (
+                                            lesson.type !== 'merged' && (
+                                                <div className="h-full flex flex-col justify-center items-center text-center p-4 animate-in fade-in zoom-in">
+                                                    <p className="text-xs font-black text-slate-800 leading-tight uppercase mb-2">{lesson.name}</p>
+                                                    <div className="space-y-1">
+                                                        <p className="text-[9px] text-blue-600 font-black uppercase flex items-center justify-center gap-1"><Users size={10}/> {viewType === 'group' ? lesson.teacher : lesson.group}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center justify-center gap-1"><MapPin size={10}/> {lesson.room}-xona</p>
+                                                    </div>
+                                                </div>
+                                            )
+                                        ) : (
+                                            <div className="h-full flex items-center justify-center text-slate-200 group-hover:text-blue-400 transition-colors">
+                                                <Plus size={24} className="opacity-0 group-hover:opacity-100" />
+                                            </div>
+                                        )}
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+          </div>
+
+          <div className="mt-16 grid grid-cols-2 gap-20 p-10 border-t border-slate-100">
+             <div className="space-y-6">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Eksport Sozlamalari</h4>
+                 <div className="space-y-3">
+                    <input placeholder="Tasdiqlovchi FISH" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none" value={exportInfo.tasdiqlovchi} onChange={e => setExportInfo({...exportInfo, tasdiqlovchi: e.target.value})} />
+                    <input placeholder="Lavozimi" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none" value={exportInfo.lavozim1} onChange={e => setExportInfo({...exportInfo, lavozim1: e.target.value})} />
+                 </div>
+             </div>
+             <div className="space-y-6">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Imzo Sozlamalari</h4>
+                 <div className="space-y-3">
+                    <input placeholder="Imzolovchi FISH" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none" value={exportInfo.imzolovchi} onChange={e => setExportInfo({...exportInfo, imzolovchi: e.target.value})} />
+                    <input placeholder="Lavozimi" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none" value={exportInfo.lavozim2} onChange={e => setExportInfo({...exportInfo, lavozim2: e.target.value})} />
+                 </div>
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminSection({ list, db, appId }) {
+  return (
+    <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden animate-in fade-in">
+      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Foydalanuvchilar So'rovlari</h3>
+        <span className="bg-blue-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full">{list.length} jami</span>
+      </div>
+      <table className="w-full text-left">
+        <thead>
+          <tr className="border-b border-slate-100">
+            <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Foydalanuvchi</th>
+            <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Status</th>
+            <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Amallar</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {list.map(u => (
+            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+              <td className="p-8">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">{u.name[0]}</div>
+                    <div>
+                        <p className="text-sm font-black text-slate-800 uppercase">{u.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">@{u.login}</p>
+                    </div>
+                </div>
+              </td>
+              <td className="p-8">
+                <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${u.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600 animate-pulse'}`}>
+                  {u.status}
+                </span>
+              </td>
+              <td className="p-8">
+                <div className="flex gap-4">
+                    {u.status === 'pending' && (
+                        <button onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id), { status: 'approved' })} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Tasdiqlash</button>
+                    )}
+                    <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id))} className="text-slate-200 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition-all">
+                        <Trash2 size={20} />
+                    </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
